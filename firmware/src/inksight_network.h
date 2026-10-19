@@ -1,6 +1,12 @@
 #ifndef INKSIGHT_NETWORK_H
 #define INKSIGHT_NETWORK_H
 
+// NOTE: this header used to be called network.h. It was renamed because
+// arduino-esp32 3.x ships a framework header `libraries/Network/src/Network.h`
+// which case-insensitively collides with `src/network.h` on macOS/Windows
+// (WiFiGeneric.h does `#include "Network.h"`). The rename keeps the project
+// buildable on case-insensitive filesystems without touching the framework.
+
 #include <Arduino.h>
 #include <stddef.h>
 #include <stdint.h>

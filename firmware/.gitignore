@@ -6,3 +6,6 @@
 
 # macOS
 .DS_Store
+
+# firmware build artifacts collected by scripts/collect_papers3_artifacts.sh
+dist/

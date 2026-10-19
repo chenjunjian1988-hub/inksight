@@ -1,5 +1,40 @@
 #include "ota.h"
-#include "network.h"
+
+// ═══════════════════════════════════════════════════════════════════════════
+// M5Stack PaperS3: OTA is intentionally disabled.
+//
+// The official InkSight release binaries target 400x300 4.2" SPI e-paper
+// panels (ESP32-C3 / ESP32). Flashing such an image onto the PaperS3 would
+// leave it unable to drive its 960x540 ET047TC1 parallel-bus panel (the panel
+// stays blank and the only recovery is a USB re-flash). Even if the backend
+// ever hands this device a pending OTA URL, it must not be followed.
+// Upgrade path for this board: USB-C re-flash (see FLASH_M5PAPERS3.md).
+// ═══════════════════════════════════════════════════════════════════════════
+#if defined(BOARD_PROFILE_M5PAPERS3)
+
+#include <Arduino.h>
+
+String g_pending_ota_url = "";
+String g_pending_ota_version = "";
+
+bool checkAndPerformOTA() {
+    if (g_pending_ota_url.length() > 0) {
+        Serial.println("[OTA] Firmware OTA is disabled on M5 PaperS3:");
+        Serial.printf("[OTA] ignoring pending URL %s\n", g_pending_ota_url.c_str());
+        Serial.println("[OTA] Re-flash this board over USB instead.");
+        g_pending_ota_url = "";
+        g_pending_ota_version = "";
+    }
+    return false;
+}
+
+bool isOtaTaskRunning() {
+    return false;
+}
+
+#else  // !BOARD_PROFILE_M5PAPERS3
+
+#include "inksight_network.h"
 #include "display.h"
 #include "config.h"
 #include "storage.h"
@@ -315,3 +350,5 @@ bool checkAndPerformOTA() {
     // on failure it clears globals and deletes itself.
     return true;
 }
+
+#endif  // BOARD_PROFILE_M5PAPERS3

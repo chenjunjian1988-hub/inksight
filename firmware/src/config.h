@@ -74,9 +74,41 @@
 #define PIN_LED        -1
 #define PIN_RGB_LED    48
 #define PIN_AI_CHAT_SW -1
+#elif defined(BOARD_PROFILE_M5PAPERS3)
+// M5Stack PaperS3 (SKU C139): ESP32-S3R8 (16MB flash / 8MB OPI PSRAM), 4.7"
+// 960x540 16-gray ET047TC1 e-paper panel driven DIRECTLY by the ESP32-S3 over
+// an 8-bit parallel bus (not SPI, not IT8951). Panel, touch and RTC are owned by
+// M5GFX's board_M5PaperS3 profile (Bus_EPD + Panel_EPD) which M5Unified
+// initialises for us, so the generic SPI e-paper pins are intentionally unused.
+// -1 keeps any remaining generic pin handling harmless.
+#define PIN_EPD_MOSI   -1
+#define PIN_EPD_SCK    -1
+#define PIN_EPD_CS     -1
+#define PIN_EPD_DC     -1
+#define PIN_EPD_RST    -1
+#define PIN_EPD_BUSY   -1
+#define PIN_BAT_ADC    3    // ADC1 channel 2, external 1:2 divider (M5Unified ratio 2.0)
+#define PIN_CFG_BTN    -1   // side button belongs to the PMS150G power IC: NOT a GPIO
+#define PIN_LED        0    // status LED
+#define PIN_AI_CHAT_SW -1
+#define BOARD_HAS_EPD_PARALLEL
 #else
 #error "Unsupported board profile"
 #endif
+
+// Board-agnostic "is the config button pressed" helper.
+// PaperS3 has no ESP32-readable user button (the side button is handled by the
+// PMS150G power IC), so PIN_CFG_BTN is -1 and every button read must go through
+// this helper. Without it, digitalRead(-1) on the other boards' assumptions
+// would look like a permanently pressed pin and could wedge the device in the
+// captive portal / abort the fetch loop forever.
+static inline bool configButtonDown() {
+#if PIN_CFG_BTN >= 0
+    return digitalRead(PIN_CFG_BTN) == LOW;
+#else
+    return false;
+#endif
+}
 
 #ifndef PIN_RGB_LED
 #define PIN_RGB_LED -1

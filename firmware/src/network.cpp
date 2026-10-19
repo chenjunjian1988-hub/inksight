@@ -1,8 +1,9 @@
-#include "network.h"
+#include "inksight_network.h"
 #include "config.h"
 #include "storage.h"
 #include "certs.h"
 #include "audio.h"
+#include "board_hooks.h"
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -23,9 +24,12 @@ bool g_suppressAbortCheck = false;
 
 static bool checkAbort() {
     if (g_suppressAbortCheck) return false;
-    if (digitalRead(PIN_CFG_BTN) == LOW) {
+    // configButtonDown() is a no-op returning false on boards without a
+    // user-readable config button (e.g. M5 PaperS3), where reading PIN_CFG_BTN
+    // directly would look like a permanently pressed pin.
+    if (configButtonDown()) {
         delay(50);
-        if (digitalRead(PIN_CFG_BTN) == LOW) {
+        if (configButtonDown()) {
             g_userAborted = true;
             return true;
         }
@@ -172,6 +176,13 @@ bool connectWiFi() {
 // ── Battery voltage ─────────────────────────────────────────
 
 float readBatteryVoltage() {
+    // Boards with a PMIC / board profile (M5 PaperS3) report the real pack
+    // voltage directly; a non-positive value means "use the generic ADC path".
+    float boardVoltage = boardReadBatteryVoltage();
+    if (boardVoltage > 0.0f) {
+        return boardVoltage;
+    }
+
     const int SAMPLES = 16;
     const int DISCARD = 2;  // Discard highest and lowest outliers
     int readings[SAMPLES];
@@ -207,6 +218,12 @@ float readBatteryVoltage() {
     uint32_t mv = esp_adc_cal_raw_to_voltage((uint32_t)avgRaw, &adcChars);
     float realBatteryVoltage = (mv / 1000.0f) * 2.0f; // R1=10k, R2=10k
     Serial.printf("[BAT] raw=%.1f adc=%umV vbat=%.2fV\n", avgRaw, (unsigned int)mv, realBatteryVoltage);
+    return realBatteryVoltage;
+#elif defined(BOARD_PROFILE_M5PAPERS3)
+    // PaperS3 1:2 divider on GPIO3; M5Unified converts with a 3.5V ADC full
+    // scale (raw * 3.5 / 4096 * 2) for this board.
+    float realBatteryVoltage = avgRaw * (3.5f / 4096.0f) * 2.0f;
+    Serial.printf("[BAT] raw=%.1f vbat=%.2fV\n", avgRaw, realBatteryVoltage);
     return realBatteryVoltage;
 #else
     float realBatteryVoltage = avgRaw * (3.3f / 4095.0f) * 2.0f;

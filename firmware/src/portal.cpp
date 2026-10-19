@@ -1,7 +1,7 @@
 #include "portal.h"
 #include "config.h"
 #include "storage.h"
-#include "network.h"
+#include "inksight_network.h"
 
 #include <WiFi.h>
 #include <WebServer.h>

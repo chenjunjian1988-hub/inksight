@@ -152,6 +152,16 @@ static void fillRect(int x, int y, int w, int h) {
 
 // ── Show WiFi setup screen ──────────────────────────────────
 
+// ── Proportional font scaling ───────────────────────────────
+// The built-in 5x7 font is drawn with an integer scale factor. Deriving it from
+// the panel height keeps the same screens legible on the small 296x128 /
+// 400x300 boards and on the 960x540 PaperS3 without hard-coded per-panel sizes.
+//   400x300 -> title 4, body 2, AP name 3 (unchanged from the original layout)
+//   960x540 -> title 7, body 3, AP name 6
+static int scaleTitle()  { return max(2, H / 75); }
+static int scaleBody()   { return max(1, H / 150); }
+static int scaleApName() { return max(2, H / 90); }
+
 void showSetupScreen(const char *apName) {
     memset(imgBuf, 0xFF, IMG_BUF_LEN);
 
@@ -160,18 +170,18 @@ void showSetupScreen(const char *apName) {
     fillRect(W * 8 / 100, H * 72 / 100, W * 84 / 100, H * 2 / 100);
 
     const char *title = "SETUP WIFI";
-    int titleScale = (H < 200) ? 2 : 4;
+    int titleScale = scaleTitle();
     int titleX = (W - textWidth(strlen(title), titleScale)) / 2;
     int titleY = H * 15 / 100;
     drawText(title, titleX, titleY, titleScale);
 
     const char *line1 = "CONNECT TO";
-    int bodyScale = (H < 200) ? 1 : 2;
+    int bodyScale = scaleBody();
     int line1X = (W - textWidth(strlen(line1), bodyScale)) / 2;
     int line1Y = H * 36 / 100;
     drawText(line1, line1X, line1Y, bodyScale);
 
-    int apScale = (H < 200) ? 2 : 3;
+    int apScale = scaleApName();
     int apX = (W - textWidth(strlen(apName), apScale)) / 2;
     int apY = H * 46 / 100;
     drawText(apName, apX, apY, apScale);
@@ -190,8 +200,8 @@ void showSetupScreen(const char *apName) {
 void showDiagnostic(const char *line1, const char *line2, const char *line3, const char *line4) {
     memset(imgBuf, 0xFF, IMG_BUF_LEN);
 
-    int titleScale = (H < 200) ? 2 : 3;
-    int bodyScale  = (H < 200) ? 1 : 2;
+    int titleScale = max(2, H / 100);   // 300px -> 3, 540px -> 5
+    int bodyScale  = scaleBody();
 
     int y = H * 10 / 100;
     int lh = 7 * titleScale + titleScale * 2;
@@ -319,8 +329,8 @@ static int computeMaxWrappedLines(int startY, int endY, int scale) {
 void showAiChatStatus(const char *state, const char *detail) {
     memset(imgBuf, 0xFF, IMG_BUF_LEN);
 
-    int titleScale = (H < 200) ? 2 : 4;
-    int bodyScale = (H < 200) ? 1 : 2;
+    int titleScale = scaleTitle();
+    int bodyScale = scaleBody();
     int marginX = W * 7 / 100;
     int contentWidth = W - marginX * 2;
     if (contentWidth < 40) contentWidth = W - 8;
@@ -499,7 +509,7 @@ void showVoiceChatScreen() {
 void showError(const char *msg) {
     memset(imgBuf, 0xFF, IMG_BUF_LEN);
 
-    int scale = (H < 200) ? 1 : 2;
+    int scale = max(1, H / 150);   // 300px -> 2, 540px -> 3
     int len = strlen(msg);
     int startX = (W - textWidth(len, scale)) / 2;
     int startY = H / 2 - (7 * scale) / 2;
@@ -694,8 +704,8 @@ void updateVocabRatingRegion(const uint8_t *oldImage) {
 void showModePreview(const char *modeName) {
     memset(imgBuf, 0xFF, IMG_BUF_LEN);
 
-    int nameScale = (H < 200) ? 2 : 3;
-    int loadScale = (H < 200) ? 1 : 2;
+    int nameScale = max(2, H / 100);   // 300px -> 3, 540px -> 5
+    int loadScale = scaleBody();
 
     int len = strlen(modeName);
     int nameX = (W - textWidth(len, nameScale)) / 2;

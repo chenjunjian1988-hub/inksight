@@ -53,6 +53,15 @@ int  getRetryCount();
 void setRetryCount(int count);
 void resetRetryCount();
 
+// Consecutive server/fetch failure counter.
+// M5 PaperS3 has no ESP32-readable config button, so this persisted counter is
+// what lets a configured device fall back to the captive portal when the
+// backend URL/LAN IP becomes unreachable (survives deep sleep because it is in
+// NVS). Reset on a successful fetch/display and when the portal opens.
+int  getServerFailureCount();
+void setServerFailureCount(int count);
+void resetServerFailureCount();
+
 // One-time boot flag for first-install live mode
 bool isFirstInstallLiveModePending();
 void markFirstInstallLiveModeDone();

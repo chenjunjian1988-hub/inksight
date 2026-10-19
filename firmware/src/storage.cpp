@@ -154,6 +154,28 @@ void resetRetryCount() {
     setRetryCount(0);
 }
 
+// ── Consecutive server/fetch failure counter ─────────────────
+// Used by the M5 PaperS3 no-button recovery path (see handleFailure() in
+// main.cpp): a configured device whose backend URL/LAN IP became unreachable
+// must still be able to reopen the captive portal. Persisted in NVS so it
+// survives the RTC-alarm power cycles of PaperS3 deep sleep.
+int getServerFailureCount() {
+    prefs.begin("inksight", true);
+    int count = prefs.getInt("srv_fail_n", 0);
+    prefs.end();
+    return count;
+}
+
+void setServerFailureCount(int count) {
+    prefs.begin("inksight", false);
+    prefs.putInt("srv_fail_n", count);
+    prefs.end();
+}
+
+void resetServerFailureCount() {
+    setServerFailureCount(0);
+}
+
 bool isFirstInstallLiveModePending() {
     prefs.begin("inksight", true);
     String marker = prefs.getString(KEY_LIVE_BOOT_MARKER_NEW, "");

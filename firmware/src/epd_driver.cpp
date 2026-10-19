@@ -1,7 +1,158 @@
 #include "epd_driver.h"
 #include "config.h"
 
-#if defined(EPD_PANEL_42_SSD1683_BW) || defined(EPD_PANEL_42_DKE_RY683) || defined(EPD_PANEL_42_GDEM042F52)
+#if defined(EPD_PANEL_47_M5PAPERS3)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// M5Stack PaperS3 (SKU C139) — 4.7" 960x540 16-gray ET047TC1 direct-drive EPD
+// ═══════════════════════════════════════════════════════════════════════════
+// The panel is wired to the ESP32-S3 as an 8-bit parallel bus (Bus_EPD) and is
+// driven by M5GFX's Panel_EPD 16-gray waveform engine. M5GFX 0.2.33+ autodetects
+// the board (GT911 on I2C 41/42) and only brings up the panel when OPI PSRAM is
+// enabled (CONFIG_SPIRAM_MODE_OCT), which this PlatformIO env guarantees through
+// board_build.arduino.memory_type = qio_opi / board_build.psram_type = opi.
+//
+// M5Unified (rather than raw M5GFX) is used because it owns the PaperS3 board
+// profile: PMS150G power sequencing (POWER_HOLD on GPIO44), BM8563 RTC for
+// timer sleep/wake, the battery ADC divider on GPIO3, buzzer and GT911 touch.
+// Only the display-facing API of this file and the two board hooks
+// (board_hooks.h) are implemented here; nothing else in the firmware changes.
+
+#include <M5Unified.h>
+#include "board_hooks.h"
+
+static bool s_papers3_started = false;
+
+static void papers3EnsureStarted() {
+    if (s_papers3_started) return;
+
+    auto cfg = M5.config();
+    cfg.clear_display = false;  // we push a frame immediately; skip the extra full refresh
+    cfg.internal_imu  = false;
+    cfg.internal_spk  = false;
+    cfg.internal_mic  = false;
+    cfg.internal_rtc  = true;   // BM8563 alarm is required for timer wake on PaperS3
+    cfg.output_power  = false;  // PaperS3 has no controllable 5V output port
+    M5.begin(cfg);
+
+    // Panel_EPD's offset_rotation is 3, so rotation 1 yields the 960x540
+    // landscape orientation. This is the same orientation the official
+    // M5PaperS3 user demo uses, and it matches InkSight's 960x540 render buffer.
+    M5.Display.setRotation(1);
+    M5.Display.setEpdMode(epd_mode_t::epd_quality);
+
+    Serial.printf("[EPD] PaperS3 init: board=%d display=%dx%d psram=%u\n",
+                  (int)M5.getBoard(), M5.Display.width(), M5.Display.height(),
+                  (unsigned)ESP.getFreePsram());
+    s_papers3_started = true;
+}
+
+void gpioInit() {
+    papers3EnsureStarted();
+}
+
+void epdInit() {
+    papers3EnsureStarted();
+    M5.Display.setEpdMode(epd_mode_t::epd_quality);
+}
+
+void epdInitFast() {
+    papers3EnsureStarted();
+    M5.Display.setEpdMode(epd_mode_t::epd_text);
+}
+
+// Push a packed 1-bit frame (W*H/8 bytes, row-major, MSB first, 0 = black).
+// LovyanGFX's grayscale_1bit copy maps source bit 0 -> backcolor and bit 1 ->
+// forecolor, therefore white must be the foreground colour for InkSight's
+// "0 = black ink" convention.
+static void papers3Push1bpp(const uint8_t *image) {
+    papers3EnsureStarted();
+    M5.Display.pushGrayscaleImage(0, 0, W, H, image, lgfx::grayscale_1bit,
+                                  TFT_WHITE, TFT_BLACK);
+    M5.Display.waitDisplay();  // block until the EPD writer task finished the refresh
+}
+
+void epdDisplay(const uint8_t *image) {
+    papers3EnsureStarted();
+    // epd_quality: full 16-gray waveform, used for the normal per-cycle refresh
+    // (and every FULL_REFRESH_INTERVAL cycles via smartDisplay()).
+    M5.Display.setEpdMode(epd_mode_t::epd_quality);
+    papers3Push1bpp(image);
+}
+
+void epdDisplayFast(const uint8_t *image) {
+    papers3EnsureStarted();
+    // epd_text: faster, fewer waveform passes; good for clock/status updates.
+    M5.Display.setEpdMode(epd_mode_t::epd_text);
+    papers3Push1bpp(image);
+}
+
+void epdDisplayDeepClear(const uint8_t *image) {
+    papers3EnsureStarted();
+    M5.Display.setEpdMode(epd_mode_t::epd_quality);
+    // Two full-screen passes (black then white) fully reverse the pigment before
+    // the real frame; this removes stubborn ghosting on the direct-drive panel.
+    M5.Display.fillScreen(TFT_BLACK);
+    M5.Display.waitDisplay();
+    M5.Display.fillScreen(TFT_WHITE);
+    M5.Display.waitDisplay();
+    papers3Push1bpp(image);
+}
+
+void epdDisplay2bpp(const uint8_t *) {
+    // InkSight requests bpp=1 for this board (fetchBMP in network.cpp); the 2bpp
+    // path is only used by the 4-colour panels. No-op so shared call sites link.
+}
+
+bool epdSupportsPartialRefresh() {
+    // Panel_EPD's partial-update path is not exposed through M5GFX; display.cpp
+    // falls back to a full refresh whenever this returns false.
+    return false;
+}
+
+void epdPartialDisplay(uint8_t *, int, int, int, int) {
+    // See epdSupportsPartialRefresh(): callers guard on the capability flag.
+}
+
+void epdPartialDisplayWithOld(uint8_t *, const uint8_t *, int, int, int, int) {
+}
+
+void epdSleep() {
+    if (!s_papers3_started) return;
+    M5.Display.waitDisplay();
+    M5.Display.sleep();
+}
+
+// ── Board hooks (see board_hooks.h) ────────────────────────────────────────
+
+void boardEnterDeepSleep(int minutes) {
+    // PaperS3 cannot be woken from deep sleep by its side button: that button is
+    // wired to the PMS150G power IC, not to an ESP32 GPIO. The supported wake
+    // path (also used by the official M5PaperS3 user demo) is:
+    //   1. program the BM8563 RTC alarm (M5Unified),
+    //   2. arm the ESP32-S3 timer wakeup as a fallback,
+    //   3. let M5Unified pulse POWER_HOLD so the power IC cuts the rail.
+    // The RTC alarm re-powers the board through the PMS150G at wake time, so wake
+    // behaves like a cold boot; InkSight's NVS state survives that.
+    Serial.printf("[SLEEP] PaperS3: BM8563 alarm + timer wake in %d min\n", minutes);
+    Serial.flush();
+    M5.Display.waitDisplay();
+    M5.Power.timerSleep(minutes * 60);  // does not return on PaperS3
+    // Defensive fallback if the board profile ever changes.
+    esp_sleep_enable_timer_wakeup((uint64_t)minutes * 60ULL * 1000000ULL);
+    esp_deep_sleep_start();
+}
+
+float boardReadBatteryVoltage() {
+    if (!s_papers3_started) return -1.0f;
+    // M5.Power.getBatteryVoltage() reports millivolts (ADC mV * 2.0 divider);
+    // InkSight's network/heartbeat code expects volts.
+    float v = M5.Power.getBatteryVoltage() / 1000.0f;
+    Serial.printf("[BAT] PaperS3 vbat=%.2fV\n", v);
+    return v > 0.1f ? v : -1.0f;
+}
+
+#elif defined(EPD_PANEL_42_SSD1683_BW) || defined(EPD_PANEL_42_DKE_RY683) || defined(EPD_PANEL_42_GDEM042F52)
 
 // ── Software SPI (bit-bang) for 4.2" panels ──
 // Avoids Busy Timeout on ESP32-C3 with non-default pins; no GxEPD2 dependency.

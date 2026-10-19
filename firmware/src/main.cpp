@@ -23,9 +23,10 @@
 #include "audio_codec.h"
 #include "audio_service.h"
 #endif
-#include "network.h"
+#include "inksight_network.h"
 #include "storage.h"
 #include "portal.h"
+#include "board_hooks.h"
 
 #if !VOICE_ONLY_BUILD
 #include "epd_driver.h"
@@ -59,6 +60,13 @@ static const float VOICE_STREAM_VAD_THRESHOLD = 150.0f;
 static const unsigned long VOICE_MAX_CAPTURE_MS = 8000;
 static const unsigned long VOICE_PLAYBACK_TAIL_CLEAR_MS = 300;
 static const int VOICE_DEEP_CLEAR_INTERVAL = 5;  // deep-clear every N turns to remove ghosting
+
+#if defined(BOARD_PROFILE_M5PAPERS3)
+// M5 PaperS3 has no ESP32-readable config button. After this many consecutive
+// fetch/server failures across deep-sleep cycles, handleFailure() reopens the
+// captive portal so the server LAN URL can be corrected (see handleFailure).
+static const int PAPERS3_PORTAL_FAILURE_THRESHOLD = 3;
+#endif
 
 struct VoiceTurnPerf {
     int turnIndex = 0;
@@ -473,6 +481,10 @@ static void enterPortalMode(PortalEntryReason reason) {
     #if !VOICE_ONLY_BUILD
     showSetupScreen(apName.c_str());
     #endif
+    // A fresh portal session restarts the no-button recovery budget: if the
+    // user ignores the AP and it times out, give them a few more boot cycles
+    // before the AP is offered again.
+    resetServerFailureCount();
     startCaptivePortal();
     ctx.state = DeviceState::PORTAL;
     ctx.portalStartedAt = millis();
@@ -482,7 +494,7 @@ static void enterPortalMode(PortalEntryReason reason) {
     Serial.printf("[PORTAL] %s portal timeout: %lus\n",
                   reason == PortalEntryReason::AUTO_WIFI_FAILURE ? "Auto" : "Manual",
                   ctx.portalTimeoutMs / 1000UL);
-    ctx.ignoreConfigButtonUntilRelease = (digitalRead(PIN_CFG_BTN) == LOW);
+    ctx.ignoreConfigButtonUntilRelease = (configButtonDown());
 }
 // ── Shared voice helpers ────────────────────────────────────
 
@@ -496,7 +508,7 @@ static void resetVoiceTurnPerf(VoiceTurnPerf &perf) {
 
 static bool checkAiChatShortPress() {
     static unsigned long pressStart = 0;
-    bool isPressed = (digitalRead(PIN_CFG_BTN) == LOW);
+    bool isPressed = (configButtonDown());
     if (isPressed) {
         if (pressStart == 0) pressStart = millis();
         return false;
@@ -898,7 +910,7 @@ void setup() {
     ledInit();
     Serial.begin(115200);
     delay(3000);
-#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E) || defined(BOARD_PROFILE_YD_ESP32_S3_N16R8)
+#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E) || defined(BOARD_PROFILE_YD_ESP32_S3_N16R8) || defined(BOARD_PROFILE_M5PAPERS3)
     analogReadResolution(12);
     analogSetAttenuation(ADC_11db);
 #endif
@@ -907,9 +919,9 @@ void setup() {
     loadConfig();
 
     bool forcePortal = false;
-    if (digitalRead(PIN_CFG_BTN) == LOW) {
+    if (configButtonDown()) {
         delay(400);
-        forcePortal = (digitalRead(PIN_CFG_BTN) == LOW);
+        forcePortal = (configButtonDown());
     }
     bool hasConfig = (cfgSSID.length() > 0);
 
@@ -972,11 +984,11 @@ void setup() {
 void loop() {
     if (gPortalMode) {
         handlePortalClients();
-        if (digitalRead(PIN_CFG_BTN) == LOW) {
+        if (configButtonDown()) {
             delay(400);
-            if (digitalRead(PIN_CFG_BTN) == LOW) {
+            if (configButtonDown()) {
                 unsigned long held = millis();
-                while (digitalRead(PIN_CFG_BTN) == LOW && millis() - held < (unsigned long)CFG_BTN_HOLD_MS) {
+                while (configButtonDown() && millis() - held < (unsigned long)CFG_BTN_HOLD_MS) {
                     delay(10);
                 }
                 if (millis() - held >= (unsigned long)CFG_BTN_HOLD_MS) {
@@ -1022,7 +1034,7 @@ void setup() {
     ledInit();
     Serial.begin(115200);
     delay(3000);
-#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E) || defined(BOARD_PROFILE_YD_ESP32_S3_N16R8)
+#if defined(BOARD_PROFILE_ESP32_C3_WROOM02) || defined(BOARD_PROFILE_SMT_WROOM32E) || defined(BOARD_PROFILE_YD_ESP32_S3_N16R8) || defined(BOARD_PROFILE_M5PAPERS3)
     analogReadResolution(12);
     analogSetAttenuation(ADC_11db);
 #endif
@@ -1041,9 +1053,9 @@ void setup() {
     loadConfig();
 
     bool forcePortal = false;
-    if (digitalRead(PIN_CFG_BTN) == LOW) {
+    if (configButtonDown()) {
         delay(400);
-        forcePortal = (digitalRead(PIN_CFG_BTN) == LOW);
+        forcePortal = (configButtonDown());
     }
 
     bool hasConfig = (cfgSSID.length() > 0);
@@ -1119,6 +1131,7 @@ void setup() {
     }
 
     resetRetryCount();
+    resetServerFailureCount();  // a successful fetch clears the no-button recovery budget
 
     cacheSave(imgBuf, IMG_BUF_LEN);
     lastContentChecksum = computeChecksum(imgBuf, IMG_BUF_LEN);
@@ -1254,7 +1267,7 @@ void loop() {
             g_suppressAbortCheck = previousSuppressAbortCheck;
             ctx.btnPressStart = 0;
             ctx.aiBtnPressStart = 0;
-            ctx.ignoreConfigButtonUntilRelease = (digitalRead(PIN_CFG_BTN) == LOW);
+            ctx.ignoreConfigButtonUntilRelease = (configButtonDown());
 #if PIN_AI_CHAT_SW >= 0
             ctx.ignoreAiButtonUntilRelease = (digitalRead(PIN_AI_CHAT_SW) == LOW);
 #endif
@@ -1317,7 +1330,7 @@ void loop() {
                 playCurrentVocabWordAudio();
 #endif
                 ctx.btnPressStart = 0;
-                ctx.ignoreConfigButtonUntilRelease = (digitalRead(PIN_CFG_BTN) == LOW);
+                ctx.ignoreConfigButtonUntilRelease = (configButtonDown());
                 Serial.println("[VOCAB] Keeping WiFi connected for review actions");
                 ctx.setupDoneAt = millis();
             } else {
@@ -1337,7 +1350,7 @@ void loop() {
             g_userAborted = false;
             bool exited = runAiChatConversation();
             ctx.btnPressStart = 0;
-            ctx.ignoreConfigButtonUntilRelease = (digitalRead(PIN_CFG_BTN) == LOW);
+            ctx.ignoreConfigButtonUntilRelease = (configButtonDown());
             Serial.printf("[AI CHAT] Manual conversation finished, exited=%s\n", exited ? "true" : "false");
             if (g_userAborted) {
                 Serial.println("User aborted AI chat -> portal");
@@ -1406,7 +1419,11 @@ void loop() {
         ctx.lastClockTick += 1000UL;
         timeChanged = true;
     }
-    if (timeChanged && cfgSleepMin > 180 && !focusListening) {
+    // Periodic clock overlay. This is only worth doing on panels with a cheap
+    // partial refresh; on PaperS3 (960x540 direct-drive EPD, no partial LUT) a
+    // full refresh every minute would destroy battery life, so skip it and let
+    // the normal per-cycle full refresh carry the time instead.
+    if (timeChanged && epdSupportsPartialRefresh() && cfgSleepMin > 180 && !focusListening) {
         int currentPeriod = currentPeriodIndex();
         if (currentPeriod != lastRenderedPeriod) {
             updateTimeDisplay();
@@ -1504,11 +1521,15 @@ static void enterDeepSleep(int minutes, bool force) {
     ledFeedback("off");
     Serial.printf("Deep sleep for %d min (~%duA)\n", minutes, 5);
     Serial.flush();
+    // Boards with board-specific power sequencing (M5 PaperS3: PMS150G power IC
+    // + BM8563 RTC alarm) take over here and never return. All other boards
+    // fall through to the generic ESP32 timer (+ optional button) wake path.
+    boardEnterDeepSleep(minutes);
     esp_sleep_enable_timer_wakeup((uint64_t)minutes * 60ULL * 1000000ULL);
 #if PIN_CFG_BTN >= 0
     pinMode(PIN_CFG_BTN, INPUT_PULLUP);
     unsigned long releaseStartedAt = millis();
-    while (digitalRead(PIN_CFG_BTN) == LOW && millis() - releaseStartedAt < 3000UL) {
+    while (configButtonDown() && millis() - releaseStartedAt < 3000UL) {
         delay(10);
     }
     delay(50);
@@ -1567,6 +1588,30 @@ static void handleFailure(const char *reason) {
     showFailureDiagnostic(reason);
     delay(5000);
 
+#if defined(BOARD_PROFILE_M5PAPERS3)
+    // ── No-button re-provisioning path (M5 PaperS3) ────────────────────────
+    // PaperS3 has no ESP32-readable config button, so a device whose saved
+    // server URL / Mac LAN IP changed would otherwise show cached content and
+    // sleep forever. Count consecutive fetch/server failures in NVS and, after
+    // PAPERS3_PORTAL_FAILURE_THRESHOLD failed boot cycles, open the captive
+    // portal so the user can correct the server URL. The counter is reset on a
+    // successful fetch and when the portal opens (so ignoring the AP is not
+    // punished with an AP on every single wake). The portal auto-times out
+    // after PORTAL_AUTO_TIMEOUT_MS (3 min) and the device goes back to sleep,
+    // so this cannot leave the radio on indefinitely.
+    int consecutiveFailures = getServerFailureCount() + 1;
+    setServerFailureCount(consecutiveFailures);
+    if (consecutiveFailures >= PAPERS3_PORTAL_FAILURE_THRESHOLD) {
+        Serial.printf("[RECOVERY] PaperS3: %d consecutive server failures -> captive portal\n",
+                      consecutiveFailures);
+        enterPortalMode(PortalEntryReason::AUTO_WIFI_FAILURE);
+        return;
+    }
+    Serial.printf("[RECOVERY] PaperS3: server failure %d/%d; portal after %d\n",
+                  consecutiveFailures, PAPERS3_PORTAL_FAILURE_THRESHOLD,
+                  PAPERS3_PORTAL_FAILURE_THRESHOLD);
+#endif
+
     if (cacheLoad(imgBuf, IMG_BUF_LEN)) {
         Serial.println("Showing cached content (offline mode)");
         const int offlineScale = 2;
@@ -1578,7 +1623,9 @@ static void handleFailure(const char *reason) {
         syncNTP();
         smartDisplay(imgBuf);
         ledFeedback("success");
-        updateTimeDisplay();
+        if (epdSupportsPartialRefresh()) {
+            updateTimeDisplay();
+        }
         lastRenderedPeriod = currentPeriodIndex();
         ctx.lastClockTick = millis();
         ctx.state = DeviceState::DISPLAYING;
@@ -2226,9 +2273,9 @@ static bool waitForContentReady() {
         showError("Generating...");
         unsigned long t0 = millis();
         while (millis() - t0 < (unsigned long)waitMs) {
-            if (digitalRead(PIN_CFG_BTN) == LOW) {
+            if (configButtonDown()) {
                 delay(400);
-                if (digitalRead(PIN_CFG_BTN) == LOW) {
+                if (configButtonDown()) {
                     Serial.println("[BOOT] Config button held during wait -> portal");
                     enterPortalMode();
                     return false;
@@ -2262,7 +2309,7 @@ static bool waitForContentReady() {
 // ── Config button handler ───────────────────────────────────
 
 static void checkConfigButton() {
-    bool isPressed = (digitalRead(PIN_CFG_BTN) == LOW);
+    bool isPressed = (configButtonDown());
 
     if (ctx.ignoreConfigButtonUntilRelease) {
         if (!isPressed) {
