@@ -58,3 +58,16 @@ test("proxy allows localhost development hosts", () => {
 
   assert.equal(res.status, 200);
 });
+
+test("proxy allows private LAN hosts (self-hosted / phone on same Wi-Fi)", () => {
+  const req = new NextRequest("http://192.168.3.6:3000/config", {
+    headers: {
+      host: "192.168.3.6:3000",
+    },
+  });
+
+  const res = proxy(req);
+
+  assert.equal(res.status, 307);
+  assert.equal(res.headers.get("location"), "http://192.168.3.6:3000/zh/config");
+});

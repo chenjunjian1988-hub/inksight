@@ -137,6 +137,23 @@
           "image_mode": "invert_dither"
         }
       ]
+    },
+    "960x540": {
+      "preset_props": {
+        "padding_x": 140,
+        "padding_y": 26,
+        "text_max_lines": 10,
+        "text_inset_x": 0
+      },
+      "decorations": [
+        {
+          "icon": "memo_img",
+          "anchor": "top_left",
+          "size": 60,
+          "margin": 12,
+          "image_mode": "invert_dither"
+        }
+      ]
     }
   }
 }

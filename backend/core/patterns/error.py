@@ -36,26 +36,31 @@ def render_error(
     draw = ImageDraw.Draw(img)
     apply_text_fontmode(draw)
 
-    font_title = load_font("inter_medium", 16)
-    font_detail = load_font("inter_medium", 11)
-    font_info = load_font("inter_medium", 10)
+    # 设计基准为 400x300；按屏幕高度等比缩放，960x540 等大屏上错误信息才看得清。
+    scale = max(1.0, screen_h / 300.0)
 
-    icon_cy = screen_h // 2 - 50
-    draw_warning_triangle(draw, screen_w // 2, icon_cy)
+    font_title = load_font("inter_medium", max(16, round(16 * scale)))
+    font_detail = load_font("inter_medium", max(11, round(11 * scale)))
+    font_info = load_font("inter_medium", max(10, round(10 * scale)))
+
+    icon_cy = screen_h // 2 - round(50 * scale)
+    draw_warning_triangle(
+        draw, screen_w // 2, icon_cy, size=max(40, round(40 * scale))
+    )
 
     title = "Service Unavailable"
     bbox = font_title.getbbox(title)
     x = (screen_w - (bbox[2] - bbox[0])) // 2
-    draw.text((x, icon_cy + 34), title, fill=EINK_FG, font=font_title)
+    draw.text((x, icon_cy + round(34 * scale)), title, fill=EINK_FG, font=font_title)
 
     detail = "Unable to reach InkSight cloud service."
     bbox2 = font_detail.getbbox(detail)
     x2 = (screen_w - (bbox2[2] - bbox2[0])) // 2
-    draw.text((x2, icon_cy + 62), detail, fill=EINK_FG, font=font_detail)
+    draw.text((x2, icon_cy + round(62 * scale)), detail, fill=EINK_FG, font=font_detail)
 
     info = f"MAC: {mac}  |  {voltage}  |  Retry in {retry_min}min"
     bbox3 = font_info.getbbox(info)
     x3 = (screen_w - (bbox3[2] - bbox3[0])) // 2
-    draw.text((x3, icon_cy + 82), info, fill=EINK_FG, font=font_info)
+    draw.text((x3, icon_cy + round(82 * scale)), info, fill=EINK_FG, font=font_info)
 
     return img

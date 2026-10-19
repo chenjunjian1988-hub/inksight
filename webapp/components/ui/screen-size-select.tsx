@@ -4,6 +4,7 @@ const OPTIONS = [
   { w: 400, h: 300, zh: '4.2"', en: '4.2"' },
   { w: 296, h: 128, zh: '2.9"', en: '2.9"' },
   { w: 648, h: 480, zh: '5.83"', en: '5.83"' },
+  { w: 960, h: 540, zh: '4.7"', en: '4.7"' }, // M5Stack PaperS3 (960x540)
 ] as const;
 
 interface ScreenSizeSelectProps {

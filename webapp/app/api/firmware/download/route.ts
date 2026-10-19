@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+// 自托管 / 局域网刷机：手填 URL 往往指向本机（http://192.168.x.x:3000/firmware/xxx.bin）。
+// 这类地址同样允许经此代理下载，浏览器端只访问同源地址，避免 CORS 问题。
+const PRIVATE_HOST_RE =
+  /^(localhost|127\.0\.0\.1|::1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})$/;
+
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url");
   if (!url) {
@@ -13,9 +18,13 @@ export async function GET(req: NextRequest) {
     const isGithub =
       parsed.hostname === "github.com" ||
       parsed.hostname.endsWith(".githubusercontent.com");
-    if (!isGithub) {
+    // 局域网/本机固件（例如 webapp/public/firmware/*.bin）
+    const isLocalBin =
+      PRIVATE_HOST_RE.test(parsed.hostname) &&
+      parsed.pathname.toLowerCase().endsWith(".bin");
+    if (!isGithub && !isLocalBin) {
       return NextResponse.json(
-        { error: "Only GitHub URLs are allowed" },
+        { error: "Only GitHub URLs or LAN .bin URLs are allowed" },
         { status: 403 },
       );
     }

@@ -10,6 +10,13 @@ const DEFAULT_ALLOWED_HOSTS = new Set([
   "::1",
 ]);
 
+// Self-hosted / LAN deployments are normally reached through a private IP
+// (e.g. http://192.168.3.6:3000 from a phone on the same Wi-Fi). Allow loopback
+// and RFC1918 hosts so the app is usable without hardcoding the current IP.
+// Extra hostnames can still be added with INKSIGHT_ALLOWED_WEB_HOSTS.
+const PRIVATE_ALLOWED_HOST_RE =
+  /^(localhost|127\.0\.0\.1|::1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})$/;
+
 function normalizeHost(raw: string | null): string {
   const value = (raw || "").split(",")[0]?.trim().toLowerCase() || "";
   if (!value) return "";
@@ -52,7 +59,8 @@ function isBypassPath(pathname: string): boolean {
 
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
-  if (!allowedHosts().has(requestHost(req))) {
+  const host = requestHost(req);
+  if (!allowedHosts().has(host) && !PRIVATE_ALLOWED_HOST_RE.test(host)) {
     return new NextResponse("Not Found", { status: 404 });
   }
   if (isBypassPath(pathname)) return NextResponse.next();

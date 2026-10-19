@@ -41,3 +41,5 @@ yarn-error.log*
 next-env.d.ts
 
 package-lock.json
+# 本地构建的 PaperS3 合并固件（从 firmware/dist/papers3/ 复制，供 WebFlasher 同源下载）
+/public/firmware/

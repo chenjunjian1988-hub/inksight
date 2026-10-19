@@ -1237,12 +1237,16 @@ def _render_api_key_invalid_image(screen_w: int, screen_h: int) -> Image.Image:
     """渲染 API key 无效提示图（1-bit），对 ESP32 固件保持兼容。
 
     始终返回 mode=\"1\" 的黑白图像，调用方按 BMP 返回给设备（HTTP 200）。
+    字号按屏幕高度缩放，避免在 960x540（M5Stack PaperS3）上小到看不清。
     """
     img = Image.new("1", (screen_w, screen_h), 1)  # 1 = 白色背景
     draw = ImageDraw.Draw(img)
     message = "API key 无效或已过期，请检查设备配置"
+    scale = max(1.0, screen_h / 300.0)
+    font_size = max(12, round(12 * scale))
+    max_text_w = max(40, int(screen_w * 0.92))
     try:
-        font = load_font("noto_serif_regular", 12)
+        font = load_font("noto_serif_regular", font_size)
     except Exception:  # pragma: no cover - 极端环境下回退
         font = None
     try:
@@ -1250,6 +1254,12 @@ def _render_api_key_invalid_image(screen_w: int, screen_h: int) -> Image.Image:
             bbox = draw.textbbox((0, 0), message, font=font)
             text_w = bbox[2] - bbox[0]
             text_h = bbox[3] - bbox[1]
+            while text_w > max_text_w and font_size > 10:
+                font_size -= 2
+                font = load_font("noto_serif_regular", font_size)
+                bbox = draw.textbbox((0, 0), message, font=font)
+                text_w = bbox[2] - bbox[0]
+                text_h = bbox[3] - bbox[1]
         else:
             text_w = len(message) * 6
             text_h = 10
@@ -1290,18 +1300,47 @@ def _render_quota_exhausted_image(screen_w: int, screen_h: int) -> Image.Image:
 
 
 def _render_device_unbound_image(screen_w: int, screen_h: int, pair_code: str) -> Image.Image:
+    """Render the "device not bound yet" pairing screen.
+
+    The pairing code is what the user has to type into the web config page, so it must stay
+    readable on every panel size. Fonts / spacing / margins are scaled by ``screen_h / 300``
+    (the size the design was tuned for) — e.g. 960x540 (M5Stack PaperS3) gets ~36px title /
+    ~25px body instead of the tiny 20/14 fixed sizes.
+    """
     img = Image.new("1", (screen_w, screen_h), 1)
     draw = ImageDraw.Draw(img)
     title = "欢迎使用 InkSight"
     pair_line = f"配对码：{pair_code}" if pair_code else "正在生成配对码..."
     hint = "请在设备配置页输入配对码完成绑定"
+
+    scale = max(1.0, screen_h / 300.0)
+    title_size = max(20, round(20 * scale))
+    body_size = max(14, round(14 * scale))
+    spacing = max(18, round(18 * scale))
+    margin = max(16, round(16 * scale))
+    max_text_w = max(40, int(screen_w * 0.92))
+
+    title_font = None
+    body_font = None
+    title_w = title_h = pair_w = pair_h = hint_w = hint_h = 0
     try:
-        title_font = load_font("noto_serif_regular", 20)
-        body_font = load_font("noto_serif_regular", 14)
-    except Exception:
-        title_font = None
-        body_font = None
-    try:
+        # Shrink the body font if the localized hint would overflow a narrow panel.
+        for _ in range(8):
+            try:
+                title_font = load_font("noto_serif_regular", title_size)
+                body_font = load_font("noto_serif_regular", body_size)
+            except Exception:
+                title_font = None
+                body_font = None
+                break
+            if not body_font:
+                break
+            hint_w = draw.textbbox((0, 0), hint, font=body_font)[2]
+            pair_w = draw.textbbox((0, 0), pair_line, font=body_font)[2]
+            if max(hint_w, pair_w) <= max_text_w or body_size <= 10:
+                break
+            body_size -= 2
+
         if title_font:
             title_bbox = draw.textbbox((0, 0), title, font=title_font)
             title_w = title_bbox[2] - title_bbox[0]
@@ -1321,9 +1360,8 @@ def _render_device_unbound_image(screen_w: int, screen_h: int, pair_code: str) -
             pair_h = 12
             hint_w = len(hint) * 7
             hint_h = 12
-        spacing = 18
         total_h = title_h + pair_h + hint_h + spacing * 2
-        y = max(16, (screen_h - total_h) // 2)
+        y = max(margin, (screen_h - total_h) // 2)
         draw.text((max(0, (screen_w - title_w) // 2), y), title, fill=0, font=title_font)
         y += title_h + spacing
         draw.text((max(0, (screen_w - pair_w) // 2), y), pair_line, fill=0, font=body_font)
