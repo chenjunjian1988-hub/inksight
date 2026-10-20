@@ -20,8 +20,8 @@
 | 设备 WiFi | ✅ `HUAWEI-1G76Z9`，设备 IP `192.168.3.5`，信号 -42 dBm |
 | 电池 | ✅ 4.10 V（M5PM1 BAT_ADC 读取正常） |
 | 屏幕 | ✅ 960×540 横屏、1-bit 黑白方向/极性正确，已显示天气卡片 |
-| 本地账号 | 设备已绑定账号 **`chen`**，初始密码 **`qxhpMZxrsG2e`**（登录后可改） |
-| LLM Key | ❌ 未配置：WEATHER/MEMO 等正常；CALENDAR/DAILY 等含 LLM 步骤的模式会走降级文案 |
+| 本地账号 | 设备已绑定两个 Owner 账号：**`chen`**（初始密码 `qxhpMZxrsG2e`）和你自己注册的 **`rosemary`**（用你自己的密码登录） |
+| LLM Key | ✅ 已配置 DeepSeek（`DEFAULT_LLM_PROVIDER=deepseek`）：文本类 LLM 模式生成真实内容；图片生成/语音仍需阿里云 Key |
 
 > ⚠️ **两个端口别搞混**
 > - **前端 WebApp**（你在电脑/手机浏览器里打开的配置页）：`http://192.168.3.6:3000`
@@ -133,7 +133,7 @@ cd ~/Documents/deepseek-harness/default-workspace/inksight/firmware
 
 ## 3. 日常使用
 
-- **WebApp 配置页**：`http://192.168.3.6:3000` → 登录 `chen` / `qxhpMZxrsG2e`
+- **WebApp 配置页**：`http://192.168.3.6:3000` → 登录 `chen` / `qxhpMZxrsG2e`（或用你自己的 `rosemary` 账号）
   → 「设备配置」→ 选模式、屏幕尺寸（已设为 **4.7" 960×540**）、刷新间隔、城市等。
 - **按键位置**（官方产品图：横放时在屏幕**左侧边框**，下面是 Button B、上面是 Button A；电源键在**右下边框**）：
 
