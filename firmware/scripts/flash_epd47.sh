@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
-# Flash an InkSight M5Stack PaperS3 firmware image over the native USB-C port.
+# Flash an InkSight 4.7" EPD firmware image over the native USB-C port.
 #
-#   ./scripts/flash_papers3.sh [path/to/image.bin] [serial-port]
+#   ./scripts/flash_epd47.sh [path/to/image.bin] [serial-port]
 #
-# Defaults to the merged image produced by collect_papers3_artifacts.sh and to
-# the first /dev/cu.usbmodem* port (macOS). Works with both esptool v4 (`write_flash`,
-# underscore options) and esptool v5 (`write-flash`, dash options).
+# Works for both the PaperDIY (K159/K159-B) and PaperS3 (C139) merged images.
+# Defaults to the first merged image found under dist/ and to the first
+# /dev/cu.usbmodem* port (macOS) or /dev/ttyACM* (Linux).
 #
-# The merged image already contains bootloader + partition table + boot_app0 +
-# application and is written at offset 0x0. See FLASH_M5PAPERS3.md for the
-# separate-offset command if you prefer individual images.
+# Works with both esptool v4 (`write_flash`, underscore options) and esptool v5
+# (`write-flash`, dash options). The merged image contains bootloader + partition
+# table + boot_app0 + application and is written at offset 0x0. See
+# FLASH_M5PAPERDIY.md / FLASH_M5PAPERS3.md for the separate-offset command.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-IMAGE="${1:-$(ls -1 dist/papers3/inksight-firmware-papers3_s3-*.bin 2>/dev/null | head -1 || true)}"
+IMAGE="${1:-$(ls -1 dist/paperdiy/inksight-firmware-paperdiy_s3-*.bin dist/papers3/inksight-firmware-papers3_s3-*.bin 2>/dev/null | head -1 || true)}"
 PORT="${2:-}"
 if [ -z "$PORT" ]; then
     PORT="$(ls /dev/cu.usbmodem* 2>/dev/null | head -1 || true)"
@@ -25,11 +26,11 @@ fi
 
 if [ -z "$IMAGE" ] || [ ! -f "$IMAGE" ]; then
     echo "error: firmware image not found. Build it first:" >&2
-    echo "       ./scripts/collect_papers3_artifacts.sh" >&2
+    echo "       ./scripts/collect_epd47_artifacts.sh paperdiy 0.1.0" >&2
     exit 1
 fi
 if [ -z "$PORT" ]; then
-    echo "error: no USB serial port found. Plug the PaperS3 into USB-C and retry," >&2
+    echo "error: no USB serial port found. Plug the board into USB-C and retry," >&2
     echo "       or pass the port explicitly: $0 \"$IMAGE\" /dev/cu.usbmodemXXXX" >&2
     echo "       (macOS: ls /dev/cu.usbmodem*  |  Linux: ls /dev/ttyACM*)" >&2
     exit 1

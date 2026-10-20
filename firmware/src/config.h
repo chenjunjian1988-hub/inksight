@@ -91,17 +91,49 @@
 #define PIN_CFG_BTN    -1   // side button belongs to the PMS150G power IC: NOT a GPIO
 #define PIN_LED        0    // status LED
 #define PIN_AI_CHAT_SW -1
+#define EPD_ROTATION   1    // panel offset_rotation=3 -> rotation 1 renders 960x540 landscape
+#define BOARD_HAS_EPD_PARALLEL
+#elif defined(BOARD_PROFILE_M5PAPERDIY)
+// M5Stack PaperDIY (K159 / K159-B): ESP32-S3R8 (16MB flash / 8MB OPI PSRAM),
+// same 4.7" 960x540 16-gray ET047TC1 panel and same 8-bit parallel bus as the
+// PaperS3. Differences:
+//   * EPD_PWR is switched by the M5PM1 PMIC (GPIO2/PYG2), not a direct ESP32 pin
+//     (M5GFX's board_M5PaperDIY autodetect sets it high before panel init);
+//   * power/battery/charge state live in the M5PM1 (no PMS150G, no BM8563 RTC,
+//     no GT911 touch);
+//   * there ARE two user buttons wired to the ESP32: ButtonA=GPIO4, ButtonB=GPIO3,
+//     both active LOW (M5Unified configures them as inputs; we add pull-ups).
+// Display pins are owned by M5GFX, so the generic SPI e-paper pins stay unset.
+#define PIN_EPD_MOSI   -1
+#define PIN_EPD_SCK    -1
+#define PIN_EPD_CS     -1
+#define PIN_EPD_DC     -1
+#define PIN_EPD_RST    -1
+#define PIN_EPD_BUSY   -1
+#define PIN_BAT_ADC    -1   // no direct ADC divider: battery is read through M5PM1 (board hook)
+#define PIN_CFG_BTN    4    // ButtonA (active LOW): config/portal button (long press = portal)
+#define PIN_LED        -1   // only an M5PM1-driven power/charge LED, not a GPIO
+#define PIN_AI_CHAT_SW 3    // ButtonB (active LOW): optional; no audio codec on this board
+#define EPD_ROTATION   1    // panel offset_rotation=3 -> rotation 1 renders 960x540 landscape
 #define BOARD_HAS_EPD_PARALLEL
 #else
 #error "Unsupported board profile"
 #endif
 
+// Rotation passed to M5.Display.setRotation() for the 47" parallel-EPD profiles.
+// The panel config in M5GFX uses offset_rotation=3, so:
+//   rotation 0 -> 540x960 portrait, rotation 1 -> 960x540 landscape (what InkSight renders),
+//   rotation 3 -> 960x540 landscape rotated 180 degrees (use if the image is upside down).
+#ifndef EPD_ROTATION
+#define EPD_ROTATION 0
+#endif
+
 // Board-agnostic "is the config button pressed" helper.
-// PaperS3 has no ESP32-readable user button (the side button is handled by the
-// PMS150G power IC), so PIN_CFG_BTN is -1 and every button read must go through
-// this helper. Without it, digitalRead(-1) on the other boards' assumptions
-// would look like a permanently pressed pin and could wedge the device in the
-// captive portal / abort the fetch loop forever.
+// M5 PaperS3 has no ESP32-readable user button (its side button is handled by
+// the PMS150G power IC), so PIN_CFG_BTN is -1 there and every button read must
+// go through this helper. Without it, digitalRead(-1) would look like a
+// permanently pressed pin and could wedge the device in the captive portal /
+// abort the fetch loop forever. PaperDIY uses this with ButtonA (GPIO4).
 static inline bool configButtonDown() {
 #if PIN_CFG_BTN >= 0
     return digitalRead(PIN_CFG_BTN) == LOW;

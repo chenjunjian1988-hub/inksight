@@ -1,3 +1,6 @@
+# ⚠️ 注意：你手上的真机是 **PaperDIY**，请优先看 [`paperdiy-quickstart.md`](paperdiy-quickstart.md)。
+# 本文是 PaperS3（C139）版本，保留给 PaperS3 用户参考（固件仍支持该板）。
+
 # InkSight × M5Stack PaperS3 快速上手（本机已部署）
 
 > 目标硬件：**M5Stack PaperS3（SKU C139，ESP32-S3，4.7" 960×540 墨水屏）**

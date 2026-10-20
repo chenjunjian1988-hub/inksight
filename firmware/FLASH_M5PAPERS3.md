@@ -18,6 +18,14 @@ Board support is provided by two M5Stack libraries, pinned in `platformio.ini`:
 
 The PlatformIO **platform is pinned to `espressif32@8.0.0`** (arduino-esp32 3.3.12 / ESP-IDF 5.x) for this env only. The 6.x platform (arduino-esp32 2.0.17) does not ship an OPI-PSRAM S3 framework variant with `CONFIG_SPIRAM_MODE_OCT`, so PaperS3 cannot work on it. Other envs keep `[common]`'s unpinned platform exactly as before.
 
+> **Sibling board:** M5Stack **PaperDIY (K159 / K159-B)** uses the same panel,
+> parallel bus and 16 MB layout but an M5PM1 PMIC, no RTC/touch and two user
+> buttons (GPIO4/GPIO3). Its env is `epd_47_m5paperdiy_s3` — see
+> [FLASH_M5PAPERDIY.md](FLASH_M5PAPERDIY.md). The helper scripts in `scripts/`
+> serve both boards; pass the board name as the first argument, e.g.
+> `./scripts/collect_epd47_artifacts.sh papers3 0.1.0-papers3`
+> (`check_epd47_artifacts.py --board papers3`).
+
 ---
 
 ## 1. Build
@@ -31,7 +39,7 @@ Or build + collect flashable artifacts in one step:
 
 ```bash
 cd firmware
-./scripts/collect_papers3_artifacts.sh 0.1.0-papers3   # optional version label
+./scripts/collect_epd47_artifacts.sh papers3 0.1.0-papers3   # board + optional version label
 ```
 
 Output (`.pio/build/epd_47_m5papers3_s3/`):
@@ -44,7 +52,7 @@ Output (`.pio/build/epd_47_m5papers3_s3/`):
 | `partitions.bin` | partition table, flash at **0x8000** |
 | `boot_app0.bin` | OTA selector (from the arduino framework), flash at **0xe000** |
 
-`scripts/collect_papers3_artifacts.sh` copies these to `firmware/dist/papers3/` and generates a WebSerial `manifest.json`:
+`scripts/collect_epd47_artifacts.sh` copies these to `firmware/dist/papers3/` and generates a WebSerial `manifest.json`:
 
 ```
 dist/papers3/
@@ -56,7 +64,7 @@ dist/papers3/
 Verify the artifacts (no hardware needed):
 
 ```bash
-python3 scripts/check_papers3_artifacts.py
+python3 scripts/check_epd47_artifacts.py --board papers3
 # merged magic/header (16MB, DIO, 80MHz), partition table @0x8000, app @0x10000, sizes, sha256
 ```
 
@@ -86,7 +94,7 @@ esptool --chip esp32s3 --port /dev/cu.usbmodemXXXX --baud 921600 \
 Convenience wrapper (auto-detects port and esptool v4/v5 syntax):
 
 ```bash
-./scripts/flash_papers3.sh dist/papers3/inksight-firmware-papers3_s3-0.1.0-papers3.bin
+./scripts/flash_epd47.sh dist/papers3/inksight-firmware-papers3_s3-0.1.0-papers3.bin
 ```
 
 > esptool v4 (`pip install esptool<5`) uses underscores: `write_flash -z --flash_mode dio --flash_freq 80m --flash_size 16MB 0x0 <image>`. PlatformIO's bundled esptool is v5 and uses dashes, as shown above.
@@ -140,7 +148,7 @@ The side button is managed by the PMS150G power IC (it is **not** an ESP32 GPIO)
 | app1 (OTA slot 1) | app/ota_1 | `0x510000` | `0x500000` (5 MB) |
 | spiffs | data/spiffs | `0xa10000` | `0x5f0000` (~5.9 MB) |
 
-The current build uses **1,846,255 bytes** of the 5 MB app slot (`RAM 45.6%` = 149,492 / 327,680 B, `Flash 35.2%` = 1,846,255 / 5,242,880 B). The app image is 1,903,632 bytes; the merged image is **1,969,168 bytes**.
+The current build uses **1,846,323 bytes** of the 5 MB app slot (`RAM 45.6%` = 149,492 / 327,680 B, `Flash 35.2%` = 1,846,323 / 5,242,880 B). The app image is 1,903,696 bytes; the merged image is **1,969,232 bytes**.
 
 > OTA is **disabled** for this board (`src/ota.cpp`): official InkSight releases are 400×300 4.2" SPI-panel builds that cannot drive the ET047TC1 panel. Upgrades are USB re-flashes only.
 
@@ -215,5 +223,5 @@ No PaperS3 was available while porting; everything below is **compile/link/byte-
 | `src/ota.cpp` | OTA hard-disabled for `BOARD_PROFILE_M5PAPERS3` |
 | `src/network.h` → `src/inksight_network.h` | renamed to avoid macOS/Windows case-insensitive collision with arduino-esp32 3.x `libraries/Network/src/Network.h` |
 | `merge_firmware.py` | supports esptool v4 (`tool-esptoolpy`) and v5 (`tool-esptool`), reports merged size/magic |
-| `scripts/collect_papers3_artifacts.sh`, `scripts/flash_papers3.sh`, `scripts/check_papers3_artifacts.py` | build/collect/flash/verify helper scripts |
+| `scripts/collect_epd47_artifacts.sh`, `scripts/flash_epd47.sh`, `scripts/check_epd47_artifacts.py` | build/collect/flash/verify helper scripts |
 | `dist/papers3/` | generated flashable artifacts (git-ignored) |

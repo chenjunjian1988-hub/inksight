@@ -1,9 +1,12 @@
-# InkSight 本地部署指南（macOS + M5Stack PaperS3 960x540）
+# InkSight 本地部署指南（macOS + M5Stack PaperDIY 960x540）
 
-本文记录在本机（macOS）实际跑通的一套本地部署：**FastAPI 后端 + Next.js WebApp + PaperS3 墨水屏**。
+本文记录在本机（macOS）实际跑通的一套本地部署：**FastAPI 后端 + Next.js WebApp + PaperDIY 墨水屏**
+（`firmware/` 同时也支持 PaperS3，两者同为 4.7" 960×540，差异见 `firmware/FLASH_M5PAPERDIY.md`）。
 所有命令都在仓库根目录 `/Users/chen/Documents/deepseek-harness/default-workspace/inksight` 下执行（下称「仓库根目录」）。
 
-> 目标设备：**M5Stack PaperS3，960x540 横屏，1-bit 黑白**。
+> 目标设备：**M5Stack PaperDIY（K159-B），960x540 横屏，1-bit 黑白**；
+> 真机 MAC `B8:1F:3F:B8:54:2C`，已绑定本地账号 `chen`（初始密码见 `docs/paperdiy-quickstart.md`）。
+> **端口提醒**：WebApp 是 `:3000`，设备配网页里填的“服务器地址”是后端 `:8080`。
 > 后端按固件请求的 `w=960&h=540` 出 **BMP（1bpp）**；WebApp/调试预览出 **PNG**。
 
 ---
@@ -14,7 +17,7 @@
 |------|------|------|------|
 | 后端 FastAPI | `http://127.0.0.1:8080`（局域网 `http://192.168.3.6:8080`） | ✅ 运行中 | `backend/logs/backend.log` |
 | WebApp Next.js | `http://127.0.0.1:3000`（局域网 `http://192.168.3.6:3000`） | ✅ 运行中 | `webapp/logs/webapp.log` |
-| 浏览器刷机固件（同源） | `http://192.168.3.6:3000/firmware/inksight-papers3-s3.bin` | ✅ 可下载（1,969,168 B） | `webapp/public/firmware/` |
+| 浏览器刷机固件（同源） | `http://192.168.3.6:3000/firmware/inksight-paperdiy-s3.bin` | ✅ 可下载（1,965,360 B） | `webapp/public/firmware/` |
 
 - 本机局域网 IP（本次）：**192.168.3.6** —— 设备要填的后端地址就是 **`http://192.168.3.6:8080`**。
 - Mac 的 IP 可能变化（DHCP），换网络后请重新确认（见 §2）。
@@ -132,7 +135,7 @@ lsof -nP -iTCP:3000 -sTCP:LISTEN   # 应看到 node 监听 *:3000
 
 ---
 
-## 4. PaperS3 设备接入（关键步骤）
+## 4. PaperDIY 设备接入（关键步骤）
 
 整体流程：**刷机 → 配网（填后端地址）→ 后端自动发 device token → 出图**。
 首次出图会显示「配对码 / 欢迎使用 InkSight」，到 WebApp 绑定后即显示内容。
@@ -241,17 +244,17 @@ backend/.venv/bin/python backend/scripts/seed-papers3-device.py --mac AA:BB:CC:D
 
 **已经放进 WebApp 静态目录的合并固件（同源，浏览器可直接下载）：**
 
-- 文件：`webapp/public/firmware/inksight-papers3-s3.bin`
-- 大小：**1,969,168 字节**（SHA-256 `5b77c356...716407`）
+- 文件：`webapp/public/firmware/inksight-paperdiy-s3.bin`
+- 大小：**1,965,360 字节**（SHA-256 `5b77c356...716407`）
 - 来源：`firmware/dist/papers3/inksight-firmware-papers3_s3-0.1.0-papers3.bin`（offset 0，ESP32-S3）
-- 浏览器访问：**`http://192.168.3.6:3000/firmware/inksight-papers3-s3.bin`**
-  （本机：`http://127.0.0.1:3000/firmware/inksight-papers3-s3.bin`）
+- 浏览器访问：**`http://192.168.3.6:3000/firmware/inksight-paperdiy-s3.bin`**
+  （本机：`http://127.0.0.1:3000/firmware/inksight-paperdiy-s3.bin`）
 
 **方式 A：浏览器 WebFlasher（Chrome / Edge）**
 
 1. 打开 `http://192.168.3.6:3000/flash`；
 2. 选择「手动固件 URL」，粘贴：
-   `http://192.168.3.6:3000/firmware/inksight-papers3-s3.bin`
+   `http://192.168.3.6:3000/firmware/inksight-paperdiy-s3.bin`
    （页面会先通过后端 `/api/firmware/validate-url` 校验，再点「校验/验证」）；
 3. 点「开始刷写」→ 选择串口（USB-C 数据线，ESP32-S3 的 USB 口）→ 写入（offset 0）；
 4. 刷写完成后按 §4.5 配网、绑定。
@@ -358,15 +361,15 @@ curl -s -o /tmp/w.png -w "webapp proxy preview: %{http_code}\n" \
 
 # --- 刷机固件（同源可下载）---
 curl -s -o /dev/null -w "firmware static   : %{http_code} %{size_download} bytes\n" \
-  "http://192.168.3.6:3000/firmware/inksight-papers3-s3.bin"     # 期望 200 + 1969168
+  "http://192.168.3.6:3000/firmware/inksight-paperdiy-s3.bin"     # 期望 200 + 1965360
 curl -s -w "\nfirmware validate : %{http_code}\n" \
-  "http://127.0.0.1:3000/api/firmware/validate-url?url=http%3A%2F%2F192.168.3.6%3A3000%2Ffirmware%2Finksight-papers3-s3.bin"
+  "http://127.0.0.1:3000/api/firmware/validate-url?url=http%3A%2F%2F192.168.3.6%3A3000%2Ffirmware%2Finksight-paperdiy-s3.bin"
 curl -s -o /dev/null -w "firmware proxy    : %{http_code} %{size_download} bytes\n" \
-  "http://127.0.0.1:3000/api/firmware/download?url=http%3A%2F%2F192.168.3.6%3A3000%2Ffirmware%2Finksight-papers3-s3.bin"
+  "http://127.0.0.1:3000/api/firmware/download?url=http%3A%2F%2F192.168.3.6%3A3000%2Ffirmware%2Finksight-paperdiy-s3.bin"
 ```
 
 预期：以上抛出的都是 `200`（WebApp 的 `/` 会 307 跳到 `/zh/...`，用 `-L` 跟随即可；
-固件相关三条分别是 200 / 200 / 200，最后一个下载 1,969,168 字节）。
+固件相关三条分别是 200 / 200 / 200，最后一个下载 1,965,360 字节）。
 
 ---
 
@@ -385,7 +388,7 @@ curl -s -o /dev/null -w "firmware proxy    : %{http_code} %{size_download} bytes
 | 词库/`VOCAB_REVIEW` 显示「暂无词卡」 | 上游词库仓库结构变了，`backend/scripts/import_kylebing_vocab.py` 旧的下载地址已 404（本次未改动）。其余模式不受影响 |
 | 日志里很多 `[FONT] Failed to load bitmap font ... OSError: invalid pixel size` | **无害**。960x540 下正文/标题字号超过内置 PCF 点阵档位时会回退到矢量 TTF 渲染，1-bit 输出依然清晰（见 `backend/logs/verify/e2e-*.png`）。该 warning 每个字体只打一次 |
 | 浏览器刷机页提示「Only GitHub URLs are allowed」 | 已修复（放行本机/局域网 `.bin`）。若仍报错，确认 WebApp 已 `rebuild` 到最新代码 |
-| 固件 URL 校验失败 | 用 `curl -I http://192.168.3.6:3000/firmware/inksight-papers3-s3.bin` 确认 200；后端必须能访问该 URL（校验是后端发起的） |
+| 固件 URL 校验失败 | 用 `curl -I http://192.168.3.6:3000/firmware/inksight-paperdiy-s3.bin` 确认 200；后端必须能访问该 URL（校验是后端发起的） |
 | `npm` 报缓存权限错误 | 始终加 `npm_config_cache=/Users/chen/Documents/deepseek-harness/default-workspace/.npm-cache` |
 | `pip` 报缓存不可写 | 加 `PIP_CACHE_DIR=/Users/chen/Documents/deepseek-harness/default-workspace/.pip-cache` |
 
@@ -409,20 +412,20 @@ curl -s -o /dev/null -w "firmware proxy    : %{http_code} %{size_download} bytes
 WebApp（`webapp/`）：
 
 5. `.env`：`INKSIGHT_BACKEND_API_BASE=http://127.0.0.1:8080`。
-6. `components/ui/screen-size-select.tsx`：屏幕尺寸新增 **4.7"（960x540）** 选项（PaperS3）。
+6. `components/ui/screen-size-select.tsx`：屏幕尺寸新增 **4.7"（960x540）** 选项（PaperDIY / PaperS3 通用）。
 7. `proxy.ts`：放行私有网段 host（`192.168.*` / `10.*` / `172.16-31.*` 等），
    否则用 `http://192.168.3.6:3000` 打开 WebApp 会 404；`proxy.test.ts` 增加对应用例。
 
 脚本 / 资源 / 文档：
 
-8. `backend/scripts/seed-papers3-device.py`：PaperS3 设备预置脚本
+8. `backend/scripts/seed-papers3-device.py`：4.7"（PaperDIY / PaperS3）设备预置脚本
    （token → 配置 → 可选本地账号绑定 + 50 次额度初始化 / 否则输出配对码）；
    根目录 `scripts/seed-papers3-device.py` 是兼容入口（根目录 `scripts/*` 被 .gitignore 忽略）。
 9. `backend/scripts/local-servers.sh`：本地一键启动/停止/重启/构建/状态/日志脚本
    （nohup + PID 文件 + 健康检查）。
-10. `webapp/public/firmware/inksight-papers3-s3.bin`：从
+10. `webapp/public/firmware/inksight-paperdiy-s3.bin`：从
     `firmware/dist/papers3/inksight-firmware-papers3_s3-0.1.0-papers3.bin` 复制来的合并固件
-    （1,969,168 B，offset 0），供 WebFlasher 同源下载；该目录已加进 `webapp/.gitignore`。
+    （1,965,360 B，offset 0），供 WebFlasher 同源下载；该目录已加进 `webapp/.gitignore`。
 11. `webapp/app/api/firmware/download/route.ts`：固件下载代理放行「本机/局域网 `.bin` URL」
     （原先只允许 GitHub），否则 WebFlasher 的手动 URL 模式无法刷本地固件。
 12. `backend/logs/.gitignore`、`webapp/logs/.gitignore`、`webapp/.gitignore`：

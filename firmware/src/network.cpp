@@ -183,6 +183,13 @@ float readBatteryVoltage() {
         return boardVoltage;
     }
 
+#if PIN_BAT_ADC < 0
+    // No direct battery ADC pin on this profile (e.g. M5 PaperDIY reads the
+    // pack through the M5PM1 PMIC); report "unknown" instead of sampling an
+    // invalid GPIO.
+    Serial.println("[BAT] no direct battery ADC on this board; voltage unavailable");
+    return 0.0f;
+#else
     const int SAMPLES = 16;
     const int DISCARD = 2;  // Discard highest and lowest outliers
     int readings[SAMPLES];
@@ -230,6 +237,7 @@ float readBatteryVoltage() {
     Serial.printf("[BAT] raw=%.1f vbat=%.2fV\n", avgRaw, realBatteryVoltage);
     return realBatteryVoltage;
 #endif
+#endif  // PIN_BAT_ADC < 0
 }
 
 // ── Stream helper ───────────────────────────────────────────

@@ -1,63 +1,90 @@
 #include "epd_driver.h"
 #include "config.h"
 
-#if defined(EPD_PANEL_47_M5PAPERS3)
+#if defined(EPD_PANEL_47_M5PAPERS3) || defined(EPD_PANEL_47_M5PAPERDIY)
 
 // ═══════════════════════════════════════════════════════════════════════════
-// M5Stack PaperS3 (SKU C139) — 4.7" 960x540 16-gray ET047TC1 direct-drive EPD
-// ═══════════════════════════════════════════════════════════════════════════
-// The panel is wired to the ESP32-S3 as an 8-bit parallel bus (Bus_EPD) and is
-// driven by M5GFX's Panel_EPD 16-gray waveform engine. M5GFX 0.2.33+ autodetects
-// the board (GT911 on I2C 41/42) and only brings up the panel when OPI PSRAM is
-// enabled (CONFIG_SPIRAM_MODE_OCT), which this PlatformIO env guarantees through
-// board_build.arduino.memory_type = qio_opi / board_build.psram_type = opi.
+// 4.7" 960x540 16-gray ET047TC1 direct-drive EPD boards:
+//   * M5Stack PaperS3  (C139)        — PMS150G power IC, BM8563 RTC, GT911 touch
+//   * M5Stack PaperDIY (K159/K159-B) — M5PM1 PMIC, no RTC/touch chip,
+//                                      ButtonA=GPIO4 / ButtonB=GPIO3 (active LOW),
+//                                      EPD_PWR switched by M5PM1 GPIO2
+// Both use the same 8-bit parallel panel bus (Bus_EPD) and M5GFX Panel_EPD
+// 16-gray waveform engine. M5GFX 0.2.33+ autodetects the board (M5PM1 on I2C
+// 41/42 for PaperDIY, GT911 for PaperS3) and only brings up the panel when OPI
+// PSRAM is enabled (CONFIG_SPIRAM_MODE_OCT), which this PlatformIO env
+// guarantees through board_build.arduino.memory_type = qio_opi.
 //
-// M5Unified (rather than raw M5GFX) is used because it owns the PaperS3 board
-// profile: PMS150G power sequencing (POWER_HOLD on GPIO44), BM8563 RTC for
-// timer sleep/wake, the battery ADC divider on GPIO3, buzzer and GT911 touch.
-// Only the display-facing API of this file and the two board hooks
-// (board_hooks.h) are implemented here; nothing else in the firmware changes.
+// M5Unified owns the board profiles (power sequencing, PMIC battery, buttons,
+// RTC for PaperS3); this file only implements the display-facing API and the
+// two board hooks (board_hooks.h).
 
 #include <M5Unified.h>
 #include "board_hooks.h"
 
-static bool s_papers3_started = false;
+static bool s_epd47_started = false;
 
-static void papers3EnsureStarted() {
-    if (s_papers3_started) return;
+static const char *epd47BoardName() {
+#if defined(BOARD_PROFILE_M5PAPERDIY)
+    return "PaperDIY";
+#else
+    return "PaperS3";
+#endif
+}
+
+static void epd47EnsureStarted() {
+    if (s_epd47_started) return;
 
     auto cfg = M5.config();
     cfg.clear_display = false;  // we push a frame immediately; skip the extra full refresh
     cfg.internal_imu  = false;
     cfg.internal_spk  = false;
     cfg.internal_mic  = false;
+#if defined(BOARD_PROFILE_M5PAPERS3)
     cfg.internal_rtc  = true;   // BM8563 alarm is required for timer wake on PaperS3
-    cfg.output_power  = false;  // PaperS3 has no controllable 5V output port
+#else
+    cfg.internal_rtc  = false;  // PaperDIY has no RTC chip; M5PM1 is the PMIC
+#endif
+    cfg.output_power  = false;  // neither board has a controllable 5V output port
     M5.begin(cfg);
 
-    // Panel_EPD's offset_rotation is 3, so rotation 1 yields the 960x540
-    // landscape orientation. This is the same orientation the official
-    // M5PaperS3 user demo uses, and it matches InkSight's 960x540 render buffer.
-    M5.Display.setRotation(1);
+    // Panel_EPD is configured with offset_rotation=3, so rotation 1 yields the
+    // 960x540 landscape orientation that matches InkSight's render buffer
+    // (rotation 0 would be 540x960 portrait; rotation 3 is the 180-degree flip).
+    M5.Display.setRotation(EPD_ROTATION);
     M5.Display.setEpdMode(epd_mode_t::epd_quality);
 
-    Serial.printf("[EPD] PaperS3 init: board=%d display=%dx%d psram=%u\n",
-                  (int)M5.getBoard(), M5.Display.width(), M5.Display.height(),
+#if defined(BOARD_PROFILE_M5PAPERDIY)
+    // Two user buttons wired directly to the ESP32 (active LOW, no external
+    // pull-up guarantee). M5Unified configures them as inputs; add pull-ups so
+    // configButtonDown() (ButtonA = PIN_CFG_BTN = GPIO4) is reliable for the
+    // portal long-press and never floats LOW.
+#if PIN_CFG_BTN >= 0
+    pinMode(PIN_CFG_BTN, INPUT_PULLUP);
+#endif
+#if PIN_AI_CHAT_SW >= 0
+    pinMode(PIN_AI_CHAT_SW, INPUT_PULLUP);
+#endif
+#endif
+
+    Serial.printf("[EPD] %s init: board=%d display=%dx%d rotation=%d psram=%u\n",
+                  epd47BoardName(), (int)M5.getBoard(),
+                  M5.Display.width(), M5.Display.height(), (int)EPD_ROTATION,
                   (unsigned)ESP.getFreePsram());
-    s_papers3_started = true;
+    s_epd47_started = true;
 }
 
 void gpioInit() {
-    papers3EnsureStarted();
+    epd47EnsureStarted();
 }
 
 void epdInit() {
-    papers3EnsureStarted();
+    epd47EnsureStarted();
     M5.Display.setEpdMode(epd_mode_t::epd_quality);
 }
 
 void epdInitFast() {
-    papers3EnsureStarted();
+    epd47EnsureStarted();
     M5.Display.setEpdMode(epd_mode_t::epd_text);
 }
 
@@ -65,30 +92,30 @@ void epdInitFast() {
 // LovyanGFX's grayscale_1bit copy maps source bit 0 -> backcolor and bit 1 ->
 // forecolor, therefore white must be the foreground colour for InkSight's
 // "0 = black ink" convention.
-static void papers3Push1bpp(const uint8_t *image) {
-    papers3EnsureStarted();
+static void epd47Push1bpp(const uint8_t *image) {
+    epd47EnsureStarted();
     M5.Display.pushGrayscaleImage(0, 0, W, H, image, lgfx::grayscale_1bit,
                                   TFT_WHITE, TFT_BLACK);
     M5.Display.waitDisplay();  // block until the EPD writer task finished the refresh
 }
 
 void epdDisplay(const uint8_t *image) {
-    papers3EnsureStarted();
+    epd47EnsureStarted();
     // epd_quality: full 16-gray waveform, used for the normal per-cycle refresh
     // (and every FULL_REFRESH_INTERVAL cycles via smartDisplay()).
     M5.Display.setEpdMode(epd_mode_t::epd_quality);
-    papers3Push1bpp(image);
+    epd47Push1bpp(image);
 }
 
 void epdDisplayFast(const uint8_t *image) {
-    papers3EnsureStarted();
+    epd47EnsureStarted();
     // epd_text: faster, fewer waveform passes; good for clock/status updates.
     M5.Display.setEpdMode(epd_mode_t::epd_text);
-    papers3Push1bpp(image);
+    epd47Push1bpp(image);
 }
 
 void epdDisplayDeepClear(const uint8_t *image) {
-    papers3EnsureStarted();
+    epd47EnsureStarted();
     M5.Display.setEpdMode(epd_mode_t::epd_quality);
     // Two full-screen passes (black then white) fully reverse the pigment before
     // the real frame; this removes stubborn ghosting on the direct-drive panel.
@@ -96,12 +123,13 @@ void epdDisplayDeepClear(const uint8_t *image) {
     M5.Display.waitDisplay();
     M5.Display.fillScreen(TFT_WHITE);
     M5.Display.waitDisplay();
-    papers3Push1bpp(image);
+    epd47Push1bpp(image);
 }
 
 void epdDisplay2bpp(const uint8_t *) {
-    // InkSight requests bpp=1 for this board (fetchBMP in network.cpp); the 2bpp
-    // path is only used by the 4-colour panels. No-op so shared call sites link.
+    // InkSight requests bpp=1 for these boards (fetchBMP in network.cpp); the
+    // 2bpp path is only used by the 4-colour panels. No-op so shared call sites
+    // link.
 }
 
 bool epdSupportsPartialRefresh() {
@@ -118,7 +146,7 @@ void epdPartialDisplayWithOld(uint8_t *, const uint8_t *, int, int, int, int) {
 }
 
 void epdSleep() {
-    if (!s_papers3_started) return;
+    if (!s_epd47_started) return;
     M5.Display.waitDisplay();
     M5.Display.sleep();
 }
@@ -126,6 +154,7 @@ void epdSleep() {
 // ── Board hooks (see board_hooks.h) ────────────────────────────────────────
 
 void boardEnterDeepSleep(int minutes) {
+#if defined(BOARD_PROFILE_M5PAPERS3)
     // PaperS3 cannot be woken from deep sleep by its side button: that button is
     // wired to the PMS150G power IC, not to an ESP32 GPIO. The supported wake
     // path (also used by the official M5PaperS3 user demo) is:
@@ -141,14 +170,28 @@ void boardEnterDeepSleep(int minutes) {
     // Defensive fallback if the board profile ever changes.
     esp_sleep_enable_timer_wakeup((uint64_t)minutes * 60ULL * 1000000ULL);
     esp_deep_sleep_start();
+#else
+    // PaperDIY: the M5PM1 PMIC keeps the 3V3 rail up during ESP32-S3 deep
+    // sleep, so the generic path in main.cpp::enterDeepSleep() is all that is
+    // needed: it arms the timer wakeup plus the config-button (ButtonA/GPIO4)
+    // wakeup via ext1. Returning here (instead of calling
+    // M5.Power.timerSleep(), which would enter deep sleep without arming the
+    // button wake) keeps long-press-to-wake/reconfigure working.
+    // Deeper alternative (newer M5PM1 API): M5PM1 timerSet(seconds,
+    // TIM_ACTION_POWERON) + shutdown() -> full rail cut, M5PM1 powers back on.
+    Serial.printf("[SLEEP] PaperDIY: ESP32-S3 timer deep sleep for %d min "
+                  "(M5PM1 keeps rails; ButtonA GPIO%d wake armed by main.cpp)\n",
+                  minutes, (int)PIN_CFG_BTN);
+    Serial.flush();
+#endif
 }
 
 float boardReadBatteryVoltage() {
-    if (!s_papers3_started) return -1.0f;
-    // M5.Power.getBatteryVoltage() reports millivolts (ADC mV * 2.0 divider);
-    // InkSight's network/heartbeat code expects volts.
+    if (!s_epd47_started) return -1.0f;
+    // M5Unified Power_Class: PaperS3 = ADC divider on GPIO3, PaperDIY = M5PM1
+    // BAT_ADC. Both report millivolts; InkSight expects volts.
     float v = M5.Power.getBatteryVoltage() / 1000.0f;
-    Serial.printf("[BAT] PaperS3 vbat=%.2fV\n", v);
+    Serial.printf("[BAT] %s vbat=%.2fV\n", epd47BoardName(), v);
     return v > 0.1f ? v : -1.0f;
 }
 

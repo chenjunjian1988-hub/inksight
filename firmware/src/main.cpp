@@ -61,11 +61,13 @@ static const unsigned long VOICE_MAX_CAPTURE_MS = 8000;
 static const unsigned long VOICE_PLAYBACK_TAIL_CLEAR_MS = 300;
 static const int VOICE_DEEP_CLEAR_INTERVAL = 5;  // deep-clear every N turns to remove ghosting
 
-#if defined(BOARD_PROFILE_M5PAPERS3)
-// M5 PaperS3 has no ESP32-readable config button. After this many consecutive
-// fetch/server failures across deep-sleep cycles, handleFailure() reopens the
-// captive portal so the server LAN URL can be corrected (see handleFailure).
-static const int PAPERS3_PORTAL_FAILURE_THRESHOLD = 3;
+#if defined(BOARD_PROFILE_M5PAPERS3) || defined(BOARD_PROFILE_M5PAPERDIY)
+// 47" EPD boards: after this many consecutive fetch/server failures across
+// deep-sleep cycles, handleFailure() reopens the captive portal so the server
+// LAN URL can be corrected. (On PaperS3 this is the only re-provisioning path,
+// since it has no ESP32-readable button; PaperDIY also has the normal long-press
+// path via ButtonA/GPIO4.) See handleFailure().
+static const int EPD47_PORTAL_FAILURE_THRESHOLD = 3;
 #endif
 
 struct VoiceTurnPerf {
@@ -1588,28 +1590,27 @@ static void handleFailure(const char *reason) {
     showFailureDiagnostic(reason);
     delay(5000);
 
-#if defined(BOARD_PROFILE_M5PAPERS3)
-    // ── No-button re-provisioning path (M5 PaperS3) ────────────────────────
-    // PaperS3 has no ESP32-readable config button, so a device whose saved
-    // server URL / Mac LAN IP changed would otherwise show cached content and
-    // sleep forever. Count consecutive fetch/server failures in NVS and, after
-    // PAPERS3_PORTAL_FAILURE_THRESHOLD failed boot cycles, open the captive
-    // portal so the user can correct the server URL. The counter is reset on a
-    // successful fetch and when the portal opens (so ignoring the AP is not
-    // punished with an AP on every single wake). The portal auto-times out
-    // after PORTAL_AUTO_TIMEOUT_MS (3 min) and the device goes back to sleep,
-    // so this cannot leave the radio on indefinitely.
+#if defined(BOARD_PROFILE_M5PAPERS3) || defined(BOARD_PROFILE_M5PAPERDIY)
+    // ── 47" EPD recovery path (PaperS3 / PaperDIY) ─────────────────────────
+    // A device whose saved server URL / Mac LAN IP changed would otherwise show
+    // cached content and sleep forever. Count consecutive fetch/server failures
+    // in NVS and, after EPD47_PORTAL_FAILURE_THRESHOLD failed boot cycles, open
+    // the captive portal so the user can correct the server URL. The counter is
+    // reset on a successful fetch and when the portal opens (so ignoring the AP
+    // is not punished with an AP on every single wake). The portal auto-times
+    // out after PORTAL_AUTO_TIMEOUT_MS (3 min) and the device goes back to
+    // sleep, so this cannot leave the radio on indefinitely.
     int consecutiveFailures = getServerFailureCount() + 1;
     setServerFailureCount(consecutiveFailures);
-    if (consecutiveFailures >= PAPERS3_PORTAL_FAILURE_THRESHOLD) {
-        Serial.printf("[RECOVERY] PaperS3: %d consecutive server failures -> captive portal\n",
+    if (consecutiveFailures >= EPD47_PORTAL_FAILURE_THRESHOLD) {
+        Serial.printf("[RECOVERY] 47in EPD: %d consecutive server failures -> captive portal\n",
                       consecutiveFailures);
         enterPortalMode(PortalEntryReason::AUTO_WIFI_FAILURE);
         return;
     }
-    Serial.printf("[RECOVERY] PaperS3: server failure %d/%d; portal after %d\n",
-                  consecutiveFailures, PAPERS3_PORTAL_FAILURE_THRESHOLD,
-                  PAPERS3_PORTAL_FAILURE_THRESHOLD);
+    Serial.printf("[RECOVERY] 47in EPD: server failure %d/%d; portal after %d\n",
+                  consecutiveFailures, EPD47_PORTAL_FAILURE_THRESHOLD,
+                  EPD47_PORTAL_FAILURE_THRESHOLD);
 #endif
 
     if (cacheLoad(imgBuf, IMG_BUF_LEN)) {

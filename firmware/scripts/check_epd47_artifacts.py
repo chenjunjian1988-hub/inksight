@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
-"""Collect and sanity-check the flashable InkSight M5Stack PaperS3 artifacts.
+"""Collect and sanity-check the flashable InkSight 4.7" EPD board artifacts.
 
-Run from the firmware/ directory (or via scripts/collect_papers3_artifacts.sh):
+Supported boards (both use the same 16MB partition layout and 960x540 panel):
 
-    python3 scripts/check_papers3_artifacts.py          # verify an existing build
-    python3 scripts/check_papers3_artifacts.py --collect  # copy into dist/papers3
+    paperdiy   env epd_47_m5paperdiy_s3   -> dist/paperdiy/
+    papers3    env epd_47_m5papers3_s3    -> dist/papers3/
+
+Usage (run from the firmware/ directory):
+
+    python3 scripts/check_epd47_artifacts.py --board paperdiy
+    python3 scripts/check_epd47_artifacts.py --board paperdiy --collect --version 0.1.0
+    python3 scripts/check_epd47_artifacts.py --board papers3 --collect
 
 What is checked (compile-time only; no hardware access):
   * merged image magic (0xE9) and bootloader header flash params (16MB, DIO/QIO, 80MHz)
@@ -23,9 +29,20 @@ import shutil
 import struct
 import sys
 
-ENV = "epd_47_m5papers3_s3"
-BUILD_DIR = os.path.join(".pio", "build", ENV)
-DIST_DIR = os.path.join("dist", "papers3")
+BOARDS = {
+    "paperdiy": {
+        "env": "epd_47_m5paperdiy_s3",
+        "dist": os.path.join("dist", "paperdiy"),
+        "asset_prefix": "inksight-firmware-paperdiy_s3",
+        "display_name": "InkSight PaperDIY",
+    },
+    "papers3": {
+        "env": "epd_47_m5papers3_s3",
+        "dist": os.path.join("dist", "papers3"),
+        "asset_prefix": "inksight-firmware-papers3_s3",
+        "display_name": "InkSight PaperS3",
+    },
+}
 
 # Partitions from partitions/inksight_16mb_ota.csv
 APP_OFFSET = 0x10000
@@ -103,16 +120,20 @@ def parse_partition_table(blob: bytes) -> list[dict]:
     return rows
 
 
-def verify(collect: bool, version: str) -> int:
-    if not os.path.isdir(BUILD_DIR):
-        print(f"ERROR: build directory not found: {BUILD_DIR}")
+def verify(board: str, collect: bool, version: str) -> int:
+    profile = BOARDS[board]
+    build_dir = os.path.join(".pio", "build", profile["env"])
+    dist_dir = profile["dist"]
+
+    if not os.path.isdir(build_dir):
+        print(f"ERROR: build directory not found: {build_dir}")
         return 1
 
-    merged = os.path.join(BUILD_DIR, "firmware_merged.bin")
-    app = os.path.join(BUILD_DIR, "firmware.bin")
-    bootloader = os.path.join(BUILD_DIR, "bootloader.bin")
-    partitions = os.path.join(BUILD_DIR, "partitions.bin")
-    boot_app0 = os.path.join(BUILD_DIR, "boot_app0.bin")
+    merged = os.path.join(build_dir, "firmware_merged.bin")
+    app = os.path.join(build_dir, "firmware.bin")
+    bootloader = os.path.join(build_dir, "bootloader.bin")
+    partitions = os.path.join(build_dir, "partitions.bin")
+    boot_app0 = os.path.join(build_dir, "boot_app0.bin")
 
     ok = True
 
@@ -124,10 +145,10 @@ def verify(collect: bool, version: str) -> int:
     def good(msg: str) -> None:
         print(f"  ok  : {msg}")
 
-    print("=== PaperS3 firmware artifacts ===")
+    print(f"=== {profile['display_name']} firmware artifacts ({profile['env']}) ===")
     for path in (merged, app, bootloader, partitions):
         if not os.path.isfile(path):
-            print(f"ERROR: missing {path} (did `pio run -e {ENV}` succeed?)")
+            print(f"ERROR: missing {path} (did `pio run -e {profile['env']}` succeed?)")
             return 1
 
     # ── merged image at offset 0 ────────────────────────────────────────────
@@ -220,17 +241,17 @@ def verify(collect: bool, version: str) -> int:
         print(f"  {path}  {os.path.getsize(path):>9} bytes  sha256={sha256(path)[:16]}…")
 
     if collect:
-        os.makedirs(DIST_DIR, exist_ok=True)
-        flat_name = f"inksight-firmware-papers3_s3-{version}.bin"
-        shutil.copyfile(merged, os.path.join(DIST_DIR, flat_name))
+        os.makedirs(dist_dir, exist_ok=True)
+        flat_name = f"{profile['asset_prefix']}-{version}.bin"
+        shutil.copyfile(merged, os.path.join(dist_dir, flat_name))
         for path in (app, bootloader, partitions):
-            shutil.copyfile(path, os.path.join(DIST_DIR, os.path.basename(path)))
+            shutil.copyfile(path, os.path.join(dist_dir, os.path.basename(path)))
         boot_app0_src = boot_app0 if os.path.isfile(boot_app0) else _find_boot_app0()
         if boot_app0_src:
-            shutil.copyfile(boot_app0_src, os.path.join(DIST_DIR, "boot_app0.bin"))
+            shutil.copyfile(boot_app0_src, os.path.join(dist_dir, "boot_app0.bin"))
 
         manifest = {
-            "name": "InkSight PaperS3",
+            "name": profile["display_name"],
             "version": version,
             "builds": [
                 {
@@ -239,13 +260,13 @@ def verify(collect: bool, version: str) -> int:
                 }
             ],
         }
-        manifest_path = os.path.join(DIST_DIR, "manifest.json")
+        manifest_path = os.path.join(dist_dir, "manifest.json")
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2)
             f.write("\n")
 
-        print(f"\n=== collected into {DIST_DIR}/ ===")
-        for name in sorted(os.listdir(DIST_DIR)):
+        print(f"\n=== collected into {dist_dir}/ ===")
+        for name in sorted(os.listdir(dist_dir)):
             print(f"  {name}")
 
     return 0 if ok else 1
@@ -269,9 +290,15 @@ def _find_boot_app0() -> str | None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--board",
+        choices=sorted(BOARDS),
+        default="paperdiy",
+        help="which 47-inch board profile to verify/collect (default: paperdiy)",
+    )
+    parser.add_argument(
         "--collect",
         action="store_true",
-        help="copy the artifacts (and a web-flasher manifest.json) into dist/papers3/",
+        help="copy the artifacts (and a web-flasher manifest.json) into dist/<board>/",
     )
     parser.add_argument(
         "--version",
@@ -279,7 +306,7 @@ def main() -> int:
         help="version string used in the artifact file name (default: dev)",
     )
     args = parser.parse_args()
-    return verify(args.collect, args.version)
+    return verify(args.board, args.collect, args.version)
 
 
 if __name__ == "__main__":
