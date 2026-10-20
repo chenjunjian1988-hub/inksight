@@ -38,6 +38,7 @@ backend/scripts/local-servers.sh restart    # 改后端代码或 .env 后
 backend/scripts/local-servers.sh rebuild    # 改 webapp 代码后
 backend/scripts/local-servers.sh stop|start
 backend/scripts/local-servers.sh logs       # 同时 tail 两个日志
+backend/scripts/device-status.sh            # 设备最近渲染/模式/刷新间隔/健康状态速查
 ```
 
 日志：`backend/logs/backend.log`、`webapp/logs/webapp.log`。
@@ -76,6 +77,11 @@ ls /dev/cu.usbmodem*        # 确认端口
 ```
 
 刷完按一下电源键（单击=开机/复位）即可启动。
+
+> ⚠️ 用 esptool 刷完后，芯片经常**停在 ROM 下载模式**（USB 口还在，但屏幕不动、串口无日志）：
+> 软件复位（esptool `--after hard_reset`）对这块板子无效，必须**物理按键冷启动**：
+> 双击电源键关机 → 再单击开机（或单击一次电源键复位）。判断方法：应用模式 USB 端口名带 MAC
+> （如 `/dev/cu.usbmodemB81F3FB8542C1`），ROM 下载模式是 `/dev/cu.usbmodem101` 且无串口输出。
 
 ### 方式 B：浏览器 WebFlasher（Chrome / Edge）
 
@@ -133,11 +139,13 @@ cd ~/Documents/deepseek-harness/default-workspace/inksight/firmware
 
   ![PaperDIY 按键位置](images/paperdiy-buttons.jpg)
 
-- **按键**（PaperDIY 有两个用户键）：
-  - **ButtonA = GPIO4**：设备醒着时长按约 2 秒 → 进配网模式；开机时按住 → 强制配网；
-    深睡时按下可唤醒。
-  - **ButtonB = GPIO3**：长按会提示「AI CHAT 不支持」（本板没有音频 codec），属正常，
-    后续可改成别的功能。
+- **按键**（PaperDIY 有两个用户键，均已真机验证）：
+  - **ButtonA = GPIO4**：深睡时按下 → 唤醒并刷新（已验证）；醒着时长按约 2 秒 → 进配网模式
+    （屏幕出现 SETUP WIFI，已验证）；开机时按住 → 强制配网。
+  - **ButtonB = GPIO3**：长按约 3 秒 → 进入 AI 对话流程（本板无音频 codec，显示提示后自动退出，
+    已验证）；后续可改成别的功能。
+  - 配网热点名一般是 `InkSight-` + MAC 后 4 位（本机是 `InkSight-542C`）。极端情况下串口日志
+    可能打印 `InkSight-0000`（已知小显示问题，不影响实际热点名/连接）。
 - **刷新/睡眠**：默认每 60 分钟唤醒刷新一次；首次安装/刚配网后会保持在线 10 分钟方便调试。
 - **电池**：140mAh，屏幕全刷一次 + WiFi 会消耗较多，建议刷新间隔 ≥ 60 分钟。
 
@@ -177,8 +185,13 @@ Displaying image... smartDisplay: full refresh (cycle 0) / Display done
 23:45 按 Button A 后设备唤醒并在 23:45:17 重新拉图（后端记录 CALENDAR，RSSI -50）——说明
 M5PM1 保持 3V3 供电、GPIO 深睡唤醒、唤醒后重新联网拉图整条链路正常。
 
-**尚未验证**：深睡实际电流、ButtonA 长按进配网、ButtonB 长按提示、电池电压精度长期表现、
-无人值守长时间稳定性、恢复到工厂固件的流程（备份已在，未实测恢复）。
+**按键也已验证**：ButtonA 长按 2 秒进配网（屏幕 SETUP WIFI，串口
+`Config button held for 2000ms, entering portal...`）；ButtonB 长按 3 秒进入 AI 对话流程
+（无音频 → 提示后自动退出，串口 `[AI CHAT] Switch held for 3000ms`）；配网恢复后
+23:51:25 重新拉图（DAILY）并正常进入 60 分钟深睡。
+
+**尚未验证**：深睡实际电流、电池电压精度长期表现、无人值守长时间稳定性、
+恢复工厂固件的流程（备份已在，未实测恢复）。
 
 ---
 

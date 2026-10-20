@@ -171,6 +171,16 @@ which is why the full backup exists for recovery.
 
 ---
 
+## 2.5 刷完之后：芯片可能停在 ROM 下载模式
+
+用 esptool 写完后，`Hard resetting via RTS pin` 对 PaperDIY 的 USB-Serial-JTAG 往往只是回到
+ROM 下载模式（USB 设备还在，但没有应用日志、屏幕不刷新）。**必须物理按键冷启动**：
+
+- 双击电源键关机，再单击开机；或单击一次电源键复位。
+- 判断当前状态：应用模式端口名带 MAC（例 `/dev/cu.usbmodemB81F3FB8542C1`），
+  ROM 下载模式是 `/dev/cu.usbmodem101` 且串口无输出。
+- 进入下载模式（重刷）：长按电源键约 2 秒直到背面右下红灯闪烁。
+
 ## 3. Flash layout (16 MB)
 
 `firmware/partitions/inksight_16mb_ota.csv` (same for PaperDIY and PaperS3):
