@@ -129,6 +129,10 @@ cd ~/Documents/deepseek-harness/default-workspace/inksight/firmware
 
 - **WebApp 配置页**：`http://192.168.3.6:3000` → 登录 `chen` / `qxhpMZxrsG2e`
   → 「设备配置」→ 选模式、屏幕尺寸（已设为 **4.7" 960×540**）、刷新间隔、城市等。
+- **按键位置**（官方产品图：横放时在屏幕**左侧边框**，下面是 Button B、上面是 Button A；电源键在**右下边框**）：
+
+  ![PaperDIY 按键位置](images/paperdiy-buttons.jpg)
+
 - **按键**（PaperDIY 有两个用户键）：
   - **ButtonA = GPIO4**：设备醒着时长按约 2 秒 → 进配网模式；开机时按住 → 强制配网；
     深睡时按下可唤醒。
@@ -169,8 +173,12 @@ Displaying image... smartDisplay: full refresh (cycle 0) / Display done
 `board=34` 即 `board_M5PaperDIY`（M5GFX 自动识别成功）；屏幕实际显示天气卡片
 （方向/黑白/排版正常）。固件构建、镜像头/分区表、C3 4.2" 与 PaperS3 环境回归均已通过。
 
-**尚未验证**：深睡电流与 RTC/按键唤醒可靠性、按键长按交互（ButtonA 进配网 / ButtonB 提示）、
-电池电压精度长期表现、长时间无人值守稳定性。
+**深睡唤醒已验证**：23:37:56 进入深睡（60 分钟定时 + ButtonA/GPIO4 唤醒），
+23:45 按 Button A 后设备唤醒并在 23:45:17 重新拉图（后端记录 CALENDAR，RSSI -50）——说明
+M5PM1 保持 3V3 供电、GPIO 深睡唤醒、唤醒后重新联网拉图整条链路正常。
+
+**尚未验证**：深睡实际电流、ButtonA 长按进配网、ButtonB 长按提示、电池电压精度长期表现、
+无人值守长时间稳定性、恢复到工厂固件的流程（备份已在，未实测恢复）。
 
 ---
 
