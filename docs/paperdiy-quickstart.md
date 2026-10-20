@@ -153,12 +153,19 @@ cd ~/Documents/deepseek-harness/default-workspace/inksight/firmware
 
 ```bash
 cd ~/Documents/deepseek-harness/default-workspace/inksight
-# 编辑 backend/.env：DEEPSEEK_API_KEY=sk-xxxx
+# 编辑 backend/.env：
+#   DEEPSEEK_API_KEY=sk-xxxx
+#   DEFAULT_LLM_PROVIDER=deepseek      # 已预置：默认文本模型走 DeepSeek
+#   DEFAULT_LLM_MODEL=deepseek-chat
 backend/scripts/local-servers.sh restart
 ```
 
-或在 WebApp「个人信息」页按账号填。没 Key 时建议只用 `WEATHER` / `MEMO` / `TIMETABLE` 等
-不依赖 LLM 的模式（当前配置里的 `CALENDAR`/`DAILY` 含 LLM 步骤，会走降级文案）。
+或在 WebApp「个人信息」页按账号填。已实测（2026-10-20 23:57）：填入 DeepSeek Key 后，
+`ZEN / POETRY / DAILY / CALENDAR` 等模式日志从 `via aliyun/...` 变为
+`via deepseek/deepseek-chat` 并生成真实内容（不再走 fallback 文案）。
+
+> 注意：**图片生成类**（ARTWALL 画廊）以及语音（STT/TTS）走的是阿里云百炼，
+> 需要另外的 `DASHSCOPE_API_KEY`；只有 DeepSeek Key 时这些模式会降级，其它文本模式正常。
 
 ---
 

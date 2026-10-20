@@ -367,10 +367,11 @@ ICON_SIZES = {
 
 # ==================== 业务默认值 ====================
 DEFAULT_CITY = "杭州"
-DEFAULT_LLM_PROVIDER = "aliyun"
-DEFAULT_LLM_MODEL = "deepseek-v3.2"
-DEFAULT_IMAGE_PROVIDER = "aliyun"
-DEFAULT_IMAGE_MODEL = "qwen-image-max"
+# 默认文本模型供应商/模型可通过环境变量覆盖（本地自托管常用：只用 DeepSeek 一把 Key）
+DEFAULT_LLM_PROVIDER = (_os.getenv("DEFAULT_LLM_PROVIDER", "aliyun") or "aliyun").strip()
+DEFAULT_LLM_MODEL = (_os.getenv("DEFAULT_LLM_MODEL", "deepseek-v3.2") or "deepseek-v3.2").strip()
+DEFAULT_IMAGE_PROVIDER = (_os.getenv("DEFAULT_IMAGE_PROVIDER", "aliyun") or "aliyun").strip()
+DEFAULT_IMAGE_MODEL = (_os.getenv("DEFAULT_IMAGE_MODEL", "qwen-image-max") or "qwen-image-max").strip()
 DEFAULT_LANGUAGE = "zh"
 DEFAULT_MODE_LANGUAGE = ""  # empty = follow webapp language setting
 DEFAULT_CONTENT_TONE = "neutral"
