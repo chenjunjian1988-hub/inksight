@@ -409,6 +409,7 @@ curl -s -o /dev/null -w "firmware proxy    : %{http_code} %{size_download} bytes
 | 设备显示「API key 无效或已过期」 | 配置里有 LLM 模式但没配 Key → §5，或先在 WebApp 取消这些模式 |
 | 设备显示「免费额度已用完」 | 本地部署在 `backend/.env` 里设置 `INKSIGHT_BILLING_ENABLED=0` 并重启后端（见 §5） |
 | 设备连不上后端 | ① 手机能打开 `http://192.168.3.6:8080/api/health` 吗？② 设备填的地址是否带 `/` 或协议写错；③ macOS 防火墙是否拦了 Python（系统设置 → 网络 → 防火墙）；④ 是否同一 Wi-Fi（很多路由器开了「AP 隔离」会挡住设备访问 Mac） |
+| Mac 重启后设备连不上 / 页面打不开 | 本机服务不会自动启动（macOS 对 `~/Documents` 有 TCC 隐私保护，launchd/登录项直接读取仓库会被拒绝；本次尝试后按用户要求放弃自启）。开机/登录后手动执行一次：`backend/scripts/local-servers.sh start` |
 | WebApp 局域网打开 404 `Not Found` | 早期版本只允许固定 host；本仓库已放行 `localhost/127.0.0.1/192.168.*/10.*/172.16-31.*`。若用自定义域名，加环境变量 `INKSIGHT_ALLOWED_WEB_HOSTS=your.domain` 后重启 WebApp |
 | WebApp 改了代码不生效 | 必须 `npm run build` 后重启 `next start`（生产模式不是热更新） |
 | 端口被占用 | `lsof -nP -iTCP:8080` / `lsof -nP -iTCP:3000`，先停掉旧进程；同时记得改 `INKSIGHT_BACKEND_API_BASE` |
